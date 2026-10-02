@@ -20,7 +20,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 
-from fastcoref import FCoref
+try:
+    from fastcoref import FCoref
+except Exception:
+    FCoref = None
 
 
 @dataclass
@@ -38,13 +41,15 @@ def _get_model() -> FCoref | None:
     after the first call.
 
     Returns None if the pretrained weights can't be fetched (e.g. no
-    internet access), so callers can fall back gracefully instead of
-    crashing. On a machine with normal internet access this will always
-    succeed and download once, then use the local cache afterward.
+    internet access or fastcoref not installed), so callers can fall
+    back gracefully instead of crashing. On a machine with normal
+    internet access and weights installed this succeeds and caches.
     """
+    if FCoref is None:
+        return None
     try:
         return FCoref()
-    except OSError:
+    except Exception:
         return None
 
 

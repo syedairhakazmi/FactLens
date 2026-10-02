@@ -933,6 +933,14 @@ function FactCheckReport({ data, originalText, onCopied }) {
             )}
           </div>
         )}
+        {data.isLiveBackend && (
+          <div className="mt-4 pt-3 flex items-center gap-2" style={{ borderTop: `1.5px dashed ${C.line}` }}>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ color: "#065F46", backgroundColor: "#D1FAE5", border: "1.5px solid #10B981", fontFamily: MONO }}>
+              <Sparkles className="w-3.5 h-3.5" />
+              LIVE PYTHON ENGINE (spaCy + BM25)
+            </span>
+          </div>
+        )}
       </div>
 
       {data.corefResolutions.length > 0 && (
@@ -1081,14 +1089,70 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [shake, setShake] = useState(0);
 
-  const runAnalysis = (inputText, exampleId) => {
+  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+  const fetchRealAnalysis = async (cleanText) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: cleanText }),
+      });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const json = await res.json();
+      return {
+        isLiveBackend: true,
+        factCheck: {
+          overallVerdict: json.fact_check.overall_verdict,
+          overallConfidence: json.fact_check.overall_confidence,
+          allOpinion: json.fact_check.all_opinion,
+          usedRetry: json.fact_check.used_retry,
+          usedWikipediaFallback: json.fact_check.used_wikipedia_fallback,
+          corefResolutions: json.fact_check.coref_resolutions.map((r) => ({
+            from: r.from_mention,
+            to: r.to_mention,
+          })),
+          subClaims: json.fact_check.sub_claims.map((c) => ({
+            text: c.text,
+            resolvedText: c.resolved_text || undefined,
+            status: c.status,
+            verdict: c.verdict || "Not Enough Evidence",
+            confidence: c.confidence || 50,
+            evidence: c.evidence || "No evidence found in local corpus.",
+            source: c.source || "Local Evidence Corpus",
+            searchTrail: c.bm25_score != null ? [
+              { label: `BM25 keyword score: ${c.bm25_score}`, state: "done" },
+              { label: `Semantic embedding score: ${c.embedding_score}`, state: "done" },
+              { label: `Retrieved evidence verdict: ${c.verdict}`, state: c.verdict === "Supported" ? "done" : "warn" },
+            ] : undefined,
+          })),
+        },
+        hateSpeech: {
+          classification: json.hate_speech.classification,
+          target: json.hate_speech.target,
+          cues: json.hate_speech.cues,
+          reason: json.hate_speech.reason,
+        },
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const runAnalysis = async (inputText, exampleId) => {
     const clean = inputText.trim();
     if (!clean) { setShake((s) => s + 1); return; }
     setAnalyzedText(clean);
     setScreen("loading");
     setStageIndex(0);
 
-    const data = exampleId && MOCK_RESPONSES[exampleId] ? MOCK_RESPONSES[exampleId] : mockAnalyze(clean);
+    // Call real backend first; fall back to mock data if offline or using canned example
+    let realData = null;
+    if (!exampleId) {
+      realData = await fetchRealAnalysis(clean);
+    }
+
+    const data = realData || (exampleId && MOCK_RESPONSES[exampleId] ? MOCK_RESPONSES[exampleId] : mockAnalyze(clean));
     setPendingRetry(!!data.factCheck.usedRetry);
     setPendingWikipedia(!!data.factCheck.usedWikipediaFallback);
     setPendingCorefCount(data.factCheck.corefResolutions.length);
