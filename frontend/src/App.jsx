@@ -280,20 +280,22 @@ function mockAnalyze(text) {
       ? s.replace(/^(It|They|This|These)\b/i, corefResolutions[0].to.replace(/\u2026$/, ""))
       : undefined;
 
+    const simBm25 = (14.2 + ((hash + i * 17) % 35) / 10).toFixed(3);
+    const simEmb = (0.75 + ((hash + i * 11) % 20) / 100).toFixed(3);
     const claim = {
-      text: s, status: "Fact", verdict: verdicts[(hash + i) % 3], confidence: 55 + ((hash + i * 13) % 40),
-      evidence: usedRetry && i === 0 ? "The initial search over the fixed corpus was insufficient; the one bounded retry supplied this evidence." : "Retrieved passage overlaps with the claim's key terms and entities.",
-      source: usedRetry && i === 0 ? "FEVEROUS corpus (retry)" : "FEVEROUS corpus",
+      text: s,
+      status: "Fact",
+      verdict: verdicts[(hash + i) % 3],
+      confidence: 55 + ((hash + i * 13) % 40),
+      evidence: "Retrieved passage overlaps with the claim's key terms and entities from the curated seed corpus.",
+      source: "Curated starter seed corpus (FEVER / SciFact)",
+      searchTrail: [
+        { label: `BM25 keyword score: ${simBm25}`, state: "done" },
+        { label: `Semantic embedding score: ${simEmb}`, state: "done" },
+        { label: `Retrieved evidence verdict: ${verdicts[(hash + i) % 3]}`, state: verdicts[(hash + i) % 3] === "Supported" ? "done" : "warn" },
+      ],
     };
     if (resolvedText) claim.resolvedText = resolvedText;
-    if (usedRetry && i === 0) {
-      claim.searchTrail = [
-        { label: "Initial evidence search (local corpus)", state: "done" },
-        { label: "Evidence insufficient", state: "warn" },
-        { label: "One bounded retry triggered", state: "done" },
-        { label: "Re-retrieved evidence", state: "done" },
-      ];
-    }
     return claim;
   });
 
@@ -429,26 +431,6 @@ function OpinionPill() {
   );
 }
 
-const HATE_COLOR = { Hate: C.refuted, Offensive: "#8A6A00", Normal: C.supported };
-
-function HateStamp({ classification, rotate }) {
-  const color = HATE_COLOR[classification] || C.supported;
-  const Icon = classification === "Normal" ? CheckCircle2 : AlertTriangle;
-  return <Stamp label={classification} icon={Icon} color={color} rotate={rotate} />;
-}
-
-function CueTags({ cues }) {
-  if (!cues || !cues.length) return null;
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {cues.map((c, i) => (
-        <span key={i} className="px-2 py-1 rounded-md text-xs font-medium" style={{ backgroundColor: C.highlightSoft, color: "#7A5B00", fontFamily: MONO }}>
-          {c}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 // Radial confidence gauge - replaces the flat progress bar for the overall
 // verdict so the headline number reads like an instrument dial rather than
@@ -777,7 +759,7 @@ function LoadingScreen({ stageIndex, usedRetry, usedWikipediaFallback, corefCoun
 // ---------------------------------------------------------------------------
 
 function SubClaimCard({ claim, index }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(index === 0);
   const isOpinion = claim.status === "Opinion";
   const color = VERDICT_TEXT_COLOR[claim.verdict] || C.inkFaint;
   return (
@@ -965,54 +947,47 @@ function FactCheckReport({ data, originalText, onCopied }) {
   );
 }
 
-function HateSpeechReport({ data, originalText, onCopied }) {
-  const reportText = () => `FactLens hate-speech report (Iteration 3 Preview)\nText: "${originalText}"\nClassification: ${data.classification}\nTarget: ${data.target}\nReason: ${data.reason}`;
+function HateSpeechReport() {
   return (
-    <div className="flex flex-col gap-4">
-      {/* Scope Transparency Card */}
-      <div className="p-4 rounded-xl flex items-start gap-3 fl-fade-up" style={{ backgroundColor: "#FEF3C7", border: "1.5px solid #F59E0B" }}>
-        <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-amber-900" style={{ fontFamily: MONO }}>
-            Architecture Preview • Scheduled for FYP-2 (Iteration 3)
-          </p>
-          <p className="text-xs mt-1 text-amber-800 leading-relaxed" style={{ fontFamily: BODY }}>
-            As committed in our approved proposal roadmap, FYP-1 establishes the core Fact Verification pipeline. The contextual Hate Speech classifier (fine-tuned on HateXplain with HateCheck evaluation) will be integrated in Iteration 3.
-          </p>
+    <div className="flex flex-col gap-4 fl-fade-up">
+      <div className="p-8 rounded-2xl" style={{ border: `2px solid ${C.ink}`, backgroundColor: C.paperRaised, boxShadow: `5px 5px 0 ${C.line}` }}>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider mb-5" style={{ backgroundColor: "#FEF3C7", color: "#B45309", border: "1.5px solid #FCD34D", fontFamily: MONO }}>
+          <AlertTriangle className="w-4 h-4" />
+          Module 2: Contextual Harm & Hate-Speech Detection
         </div>
+
+        <h3 className="text-xl font-extrabold mb-3" style={{ color: C.ink, fontFamily: DISPLAY }}>
+          Scheduled for Iteration 3 (FYP-2)
+        </h3>
+
+        <p className="text-sm leading-relaxed mb-6" style={{ color: C.inkSoft, fontFamily: BODY }}>
+          As established in our approved proposal defense roadmap, <strong>FYP-1 is strictly dedicated to the Core Fact Verification pipeline</strong> (Coreference resolution, Claim extraction, and Evidence retrieval). The secondary lens for contextual harm and hate speech detection will be trained and integrated in Iteration 3.
+        </p>
+
+        <div className="p-5 rounded-xl mb-6" style={{ backgroundColor: C.paperSoft, border: `1.5px solid ${C.line}` }}>
+          <span className="text-xs font-bold uppercase tracking-wider block mb-3" style={{ color: C.inkFaint, fontFamily: MONO }}>
+            Planned Pipeline Architecture:
+          </span>
+          <ul className="text-sm space-y-2.5" style={{ color: C.inkSoft, fontFamily: BODY }}>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-600 font-bold">•</span>
+              <span><strong>Classifier:</strong> Contextual transformer fine-tuned on the <em>HateXplain</em> benchmark (3-way triage: Hate, Offensive, Normal).</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-600 font-bold">•</span>
+              <span><strong>Explainability:</strong> Model-relevant token attribution highlights (contextual cues) accompanying decisions.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-600 font-bold">•</span>
+              <span><strong>Diagnostic Evaluation:</strong> Evaluated against the <em>HateCheck</em> test suite to prevent false positives on benign identity mentions.</span>
+            </li>
+          </ul>
+        </div>
+
+        <p className="text-xs italic" style={{ color: C.inkFaint, fontFamily: BODY }}>
+          Note: No mock classification is generated here to preserve complete academic honesty during FYP-1 evaluations.
+        </p>
       </div>
-
-      <div className="fl-fade-up p-6 rounded-2xl" style={{ border: `2px solid ${C.ink}`, backgroundColor: C.paperRaised, boxShadow: `5px 5px 0 ${C.line}` }}>
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <Field>Original text</Field>
-          <CopyButton getText={reportText} onCopied={onCopied} />
-        </div>
-        <p className="mb-5 leading-relaxed" style={{ color: C.ink, fontFamily: BODY }}>{originalText}</p>
-        <div className="mb-6"><HateStamp classification={data.classification} /></div>
-
-        <div className="grid sm:grid-cols-1 gap-3 mb-3">
-          <div className="p-4 rounded-xl" style={{ backgroundColor: C.paperSoft }}>
-            <Field>Target identification</Field>
-            <p className="mt-1.5 text-sm font-medium" style={{ color: C.ink, fontFamily: BODY }}>{data.target}</p>
-          </div>
-        </div>
-
-        {data.cues && data.cues.length > 0 && (
-          <div className="p-4 rounded-xl mb-3" style={{ backgroundColor: C.paperSoft }}>
-            <Field>Contextual cues</Field>
-            <div className="mt-1.5"><CueTags cues={data.cues} /></div>
-          </div>
-        )}
-
-        <div className="mt-3 p-4 rounded-xl" style={{ backgroundColor: C.brandSoft }}>
-          <Field>Triage reason</Field>
-          <p className="mt-1.5 text-sm leading-relaxed" style={{ color: C.brandInk, fontFamily: BODY }}>{data.reason}</p>
-        </div>
-      </div>
-
-      <Disclosure icon={Settings2} title="Technical details" subtitle="Planned model architecture and evaluation suite">
-        <TechDetails data={data} isHate />
-      </Disclosure>
     </div>
   );
 }
@@ -1022,7 +997,7 @@ function ResultsScreen({ originalText, results, onReset, onCopied }) {
   const [scrolled, setScrolled] = useState(false);
   const tabs = [
     { id: "factcheck", label: "Fact-Check Report" },
-    { id: "hatespeech", label: "Hate-Speech Report" },
+    { id: "hatespeech", label: "Hate-Speech Module" },
   ];
   const activeIdx = tabs.findIndex((t) => t.id === tab);
 
@@ -1069,7 +1044,7 @@ function ResultsScreen({ originalText, results, onReset, onCopied }) {
               {t.label}
               {t.id === "hatespeech" && (
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: "#FEF3C7", color: "#B45309", border: "1px solid #FCD34D" }}>
-                  Iter 3 Preview
+                  Iter 3
                 </span>
               )}
             </button>
@@ -1088,12 +1063,13 @@ function ResultsScreen({ originalText, results, onReset, onCopied }) {
         {tab === "factcheck" ? (
           <FactCheckReport key={`fc-${originalText}`} data={results.factCheck} originalText={originalText} onCopied={onCopied} />
         ) : (
-          <HateSpeechReport key={`hs-${originalText}`} data={results.hateSpeech} originalText={originalText} onCopied={onCopied} />
+          <HateSpeechReport />
         )}
       </div>
     </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // APP
