@@ -429,6 +429,26 @@ function OpinionPill() {
   );
 }
 
+const HATE_COLOR = { Hate: C.refuted, Offensive: "#8A6A00", Normal: C.supported };
+
+function HateStamp({ classification, rotate }) {
+  const color = HATE_COLOR[classification] || C.supported;
+  const Icon = classification === "Normal" ? CheckCircle2 : AlertTriangle;
+  return <Stamp label={classification} icon={Icon} color={color} rotate={rotate} />;
+}
+
+function CueTags({ cues }) {
+  if (!cues || !cues.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {cues.map((c, i) => (
+        <span key={i} className="px-2 py-1 rounded-md text-xs font-medium" style={{ backgroundColor: C.highlightSoft, color: "#7A5B00", fontFamily: MONO }}>
+          {c}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // Radial confidence gauge - replaces the flat progress bar for the overall
 // verdict so the headline number reads like an instrument dial rather than
@@ -808,15 +828,23 @@ function SubClaimCard({ claim, index }) {
   );
 }
 
-function TechDetails({ data }) {
-  const rows = [
-    ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" → "${c.to}"`).join("; ") : "No pronouns required resolution in this text"],
-    ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} subjective opinions`],
-    ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
-    ["Evidence retrieval", "BM25Plus keyword search + dense semantic embedding ranking"],
-    ["Verification engine", "Cross-references assertion against top-ranked corpus evidence"],
-    ["Evidence sources", "FEVER, FEVEROUS, SciFact evidence corpora"],
-  ];
+function TechDetails({ data, isHate = false }) {
+  const rows = isHate
+    ? [
+        ["Model Architecture", "Fine-tuned contextual transformer (HateXplain baseline: Hate / Offensive / Normal)"],
+        ["Target Identification", data.target || "Demographic / identity category mapping"],
+        ["Contextual Cues", "Model-relevant token attribution highlights accompanying the classification decision"],
+        ["Evaluation Suite", "HateCheck diagnostic test suite to ensure benign identity mentions are not falsely flagged"],
+        ["Timeline Status", "Scheduled for Phase 1 Iteration 3 / FYP-2 development as committed in approved proposal"],
+      ]
+    : [
+        ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" → "${c.to}"`).join("; ") : "No pronouns required resolution in this text"],
+        ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} subjective opinions`],
+        ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
+        ["Evidence retrieval", "BM25Plus keyword search + dense semantic embedding ranking"],
+        ["Verification engine", "Cross-references assertion against top-ranked corpus evidence"],
+        ["Evidence sources", "Curated starter seed corpus (FEVER, FEVEROUS, SciFact samples)"],
+      ];
   return (
     <div className="flex flex-col gap-2.5">
       {rows.map(([label, value]) => (
@@ -937,8 +965,66 @@ function FactCheckReport({ data, originalText, onCopied }) {
   );
 }
 
+function HateSpeechReport({ data, originalText, onCopied }) {
+  const reportText = () => `FactLens hate-speech report (Iteration 3 Preview)\nText: "${originalText}"\nClassification: ${data.classification}\nTarget: ${data.target}\nReason: ${data.reason}`;
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Scope Transparency Card */}
+      <div className="p-4 rounded-xl flex items-start gap-3 fl-fade-up" style={{ backgroundColor: "#FEF3C7", border: "1.5px solid #F59E0B" }}>
+        <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-900" style={{ fontFamily: MONO }}>
+            Architecture Preview • Scheduled for FYP-2 (Iteration 3)
+          </p>
+          <p className="text-xs mt-1 text-amber-800 leading-relaxed" style={{ fontFamily: BODY }}>
+            As committed in our approved proposal roadmap, FYP-1 establishes the core Fact Verification pipeline. The contextual Hate Speech classifier (fine-tuned on HateXplain with HateCheck evaluation) will be integrated in Iteration 3.
+          </p>
+        </div>
+      </div>
+
+      <div className="fl-fade-up p-6 rounded-2xl" style={{ border: `2px solid ${C.ink}`, backgroundColor: C.paperRaised, boxShadow: `5px 5px 0 ${C.line}` }}>
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <Field>Original text</Field>
+          <CopyButton getText={reportText} onCopied={onCopied} />
+        </div>
+        <p className="mb-5 leading-relaxed" style={{ color: C.ink, fontFamily: BODY }}>{originalText}</p>
+        <div className="mb-6"><HateStamp classification={data.classification} /></div>
+
+        <div className="grid sm:grid-cols-1 gap-3 mb-3">
+          <div className="p-4 rounded-xl" style={{ backgroundColor: C.paperSoft }}>
+            <Field>Target identification</Field>
+            <p className="mt-1.5 text-sm font-medium" style={{ color: C.ink, fontFamily: BODY }}>{data.target}</p>
+          </div>
+        </div>
+
+        {data.cues && data.cues.length > 0 && (
+          <div className="p-4 rounded-xl mb-3" style={{ backgroundColor: C.paperSoft }}>
+            <Field>Contextual cues</Field>
+            <div className="mt-1.5"><CueTags cues={data.cues} /></div>
+          </div>
+        )}
+
+        <div className="mt-3 p-4 rounded-xl" style={{ backgroundColor: C.brandSoft }}>
+          <Field>Triage reason</Field>
+          <p className="mt-1.5 text-sm leading-relaxed" style={{ color: C.brandInk, fontFamily: BODY }}>{data.reason}</p>
+        </div>
+      </div>
+
+      <Disclosure icon={Settings2} title="Technical details" subtitle="Planned model architecture and evaluation suite">
+        <TechDetails data={data} isHate />
+      </Disclosure>
+    </div>
+  );
+}
+
 function ResultsScreen({ originalText, results, onReset, onCopied }) {
+  const [tab, setTab] = useState("factcheck");
   const [scrolled, setScrolled] = useState(false);
+  const tabs = [
+    { id: "factcheck", label: "Fact-Check Report" },
+    { id: "hatespeech", label: "Hate-Speech Report" },
+  ];
+  const activeIdx = tabs.findIndex((t) => t.id === tab);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -965,14 +1051,45 @@ function ResultsScreen({ originalText, results, onReset, onCopied }) {
           </button>
         </div>
 
-        <div className="flex items-center gap-2 mb-6 fl-fade-up">
-          <Sparkles className="w-4 h-4" style={{ color: C.brand }} />
-          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: C.inkSoft, fontFamily: MONO }}>
-            Verified Fact-Check Case File
+        <div className="flex items-center gap-2 mb-3 fl-fade-up">
+          <Sparkles className="w-3.5 h-3.5" style={{ color: C.brand }} />
+          <span className="text-xs" style={{ color: C.inkFaint, fontFamily: BODY }}>
+            Dual-lens analysis: cross-referencing factual assertions and contextual harm in a single case file.
           </span>
         </div>
 
-        <FactCheckReport key={`fc-${originalText}`} data={results.factCheck} originalText={originalText} onCopied={onCopied} />
+        <div className="relative flex mb-7 gap-6 fl-fade-up" style={{ borderBottom: `2px solid ${C.line}` }}>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className="fl-tab-btn relative px-4 py-2.5 text-sm font-semibold flex items-center gap-2"
+              style={{ color: tab === t.id ? C.ink : C.inkFaint, fontFamily: BODY }}
+            >
+              {t.label}
+              {t.id === "hatespeech" && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: "#FEF3C7", color: "#B45309", border: "1px solid #FCD34D" }}>
+                  Iter 3 Preview
+                </span>
+              )}
+            </button>
+          ))}
+          <div
+            className="absolute bottom-[-2px] h-[3px] rounded-full"
+            style={{
+              backgroundColor: C.brand,
+              width: `${100 / tabs.length}%`,
+              left: `${activeIdx * (100 / tabs.length)}%`,
+              transition: "left 0.25s cubic-bezier(.2,.8,.2,1)",
+            }}
+          />
+        </div>
+
+        {tab === "factcheck" ? (
+          <FactCheckReport key={`fc-${originalText}`} data={results.factCheck} originalText={originalText} onCopied={onCopied} />
+        ) : (
+          <HateSpeechReport key={`hs-${originalText}`} data={results.hateSpeech} originalText={originalText} onCopied={onCopied} />
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from app.coreference.resolver import resolve
 from app.claims.detector import extract_claims
 from app.retrieval.searcher import retrieve
+from app.verification.verifier import verify_claim
 
 logger = logging.getLogger("factlens")
 
@@ -43,33 +44,33 @@ DEFAULT_EVIDENCE_CORPUS: list[tuple[str, str]] = [
     (
         "Clinical trials and observational studies of over 1.2 million individuals found no statistically "
         "significant link between mRNA vaccines and fertility outcomes or pregnancy complications.",
-        "SciFact corpus (ID: 4128)",
+        "SciFact starter seed (ID: 4128)",
     ),
     (
         "The COVID-19 vaccine received official emergency use authorization and subsequent full regulatory approval "
         "following Phase 3 multinational randomized clinical trials.",
-        "FEVEROUS corpus (ID: 9811)",
+        "FEVEROUS starter seed (ID: 9811)",
     ),
     (
         "Water boils at 100 degrees Celsius (212 degrees Fahrenheit) at standard atmospheric pressure at sea level.",
-        "Wikipedia (Physical Sciences)",
+        "Wikipedia starter seed (Physical Sciences)",
     ),
     (
         "Antibiotics are medicines that fight bacterial infections in people and animals. They do not work against viral infections such as colds or flu.",
-        "SciFact corpus (ID: 1042)",
+        "SciFact starter seed (ID: 1042)",
     ),
     # Geography & History (FEVER / Wikipedia)
     (
         "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France. It was constructed from 1887 to 1889 as the entrance to the 1889 World's Fair.",
-        "FEVER corpus (ID: 10839)",
+        "FEVER starter seed (ID: 10839)",
     ),
     (
         "Paris is the capital and most populous city of France, with an estimated population of over 2.1 million residents within city limits.",
-        "FEVER corpus (ID: 7421)",
+        "FEVER starter seed (ID: 7421)",
     ),
     (
         "The Great Wall of China is a series of fortifications that were built across the historical northern borders of ancient Chinese states.",
-        "FEVER corpus (ID: 3912)",
+        "FEVER starter seed (ID: 3912)",
     ),
     # Technology
     (
@@ -196,67 +197,27 @@ def analyze_pipeline(payload: AnalyzeRequest):
         else:
             # Checkable factual claim - execute retrieval
             retrieved = retrieve(item.text, DEFAULT_EVIDENCE_CORPUS, top_k=1)
+            top = retrieved[0] if retrieved else None
 
-            if retrieved:
-                top = retrieved[0]
-                # Combined score lives in [0, 1]
-                score = top.combined_score
-                fact_scores.append(score)
+            # Delegate verification to dedicated verifier module
+            ver_res = verify_claim(item.text, top)
+            if top:
+                fact_scores.append(top.combined_score)
 
-                # Verification stub mapping based on retrieval relevance
-                if score >= 0.35:
-                    # High relevance evidence found
-                    # Check for direct negation signals between claim and evidence
-                    is_negated = any(
-                        neg in item.text.lower() for neg in ["not", "never", "fake", "causes infertility", "hoax"]
-                    ) and "no statistically significant" in top.text.lower()
-
-                    if is_negated or "causes infertility" in item.text.lower():
-                        verdict = "Refuted"
-                        confidence = int(min(95, max(75, score * 100 + 15)))
-                    else:
-                        verdict = "Supported"
-                        confidence = int(min(95, max(70, score * 100 + 10)))
-
-                    evidence_text = top.text
-                    evidence_source = top.source
-                elif score >= 0.15:
-                    verdict = "Not Enough Evidence"
-                    confidence = int(score * 100 + 20)
-                    evidence_text = f"Candidate evidence found with low relevance: \"{top.text}\""
-                    evidence_source = f"{top.source} (weak match)"
-                else:
-                    verdict = "Not Enough Evidence"
-                    confidence = 45
-                    evidence_text = "No sufficiently relevant evidence found in the corpus for this claim."
-                    evidence_source = "Corpus Search (Insufficient)"
-
-                sub_claims.append(
-                    SubClaimResult(
-                        text=item.text,
-                        resolved_text=item.text if item.text != raw_text else None,
-                        status="Fact",
-                        verdict=verdict,
-                        confidence=confidence,
-                        evidence=evidence_text,
-                        source=evidence_source,
-                        reason=item.reason,
-                        bm25_score=round(top.bm25_score, 4),
-                        embedding_score=round(top.embedding_score, 4),
-                    )
+            sub_claims.append(
+                SubClaimResult(
+                    text=item.text,
+                    resolved_text=item.text if item.text != raw_text else None,
+                    status="Fact",
+                    verdict=ver_res.verdict,
+                    confidence=ver_res.confidence,
+                    evidence=ver_res.evidence_text,
+                    source=ver_res.evidence_source,
+                    reason=ver_res.reason,
+                    bm25_score=round(top.bm25_score, 4) if top else None,
+                    embedding_score=round(top.embedding_score, 4) if top else None,
                 )
-            else:
-                sub_claims.append(
-                    SubClaimResult(
-                        text=item.text,
-                        status="Fact",
-                        verdict="Not Enough Evidence",
-                        confidence=40,
-                        evidence="Empty corpus search returned no candidate passages.",
-                        source="Local Corpus",
-                        reason=item.reason,
-                    )
-                )
+            )
 
     # ---------------------------------------------------------
     # Overall Fact-Check Verdict aggregation
