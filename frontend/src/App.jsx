@@ -154,11 +154,11 @@ function GlobalStyle() {
 // ---------------------------------------------------------------------------
 
 const EXAMPLES = [
-  { id: "eiffel", label: "Historic / Landmark", sub: "FEVER corpus evidence match", text: "The Eiffel Tower was completed in 1889." },
-  { id: "coref", label: "Pronoun resolution", sub: "fastcoref resolves pronouns across sentences", text: "The COVID-19 vaccine received official authorization. It was evaluated in randomized clinical trials." },
-  { id: "opinion", label: "Subjective opinion", sub: "spaCy fact vs opinion filtering", text: "I think this is the most wonderful restaurant in the city." },
-  { id: "science", label: "Scientific fact", sub: "SciFact physical science corpus", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
-  { id: "vaccine", label: "Refuted medical claim", sub: "Clinical trials evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
+  { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "FEVER corpus evidence match", text: "The Eiffel Tower was completed in 1889." },
+  { id: "coref", kind: "factcheck", label: "Pronoun resolution", sub: "fastcoref resolves pronouns across sentences", text: "The COVID-19 vaccine received official authorization. It was evaluated in randomized clinical trials." },
+  { id: "opinion", kind: "factcheck", label: "Subjective opinion", sub: "spaCy fact vs opinion filtering", text: "I think this is the most wonderful restaurant in the city." },
+  { id: "science", kind: "factcheck", label: "Scientific fact", sub: "SciFact physical science corpus", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
+  { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "Clinical trials evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
 ];
 
 const MOCK_RESPONSES = {
