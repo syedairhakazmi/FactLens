@@ -1,0 +1,8 @@
+rank_bm25
+spacy
+fastcoref
+sentence-transformers
+fastapi
+uvicorn
+pydantic
+numpy
