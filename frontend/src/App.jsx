@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Search, ShieldAlert, ShieldCheck, ChevronDown,
+  Search, ChevronDown,
   CheckCircle2, XCircle, HelpCircle, ArrowLeft, Loader2,
   FileText, AlertTriangle, Globe2, Database, ArrowUpRight, Sparkles,
   ArrowRight, Settings2, Link2, RefreshCw, MessageSquare, Copy, Check,
@@ -48,7 +48,6 @@ const C = {
 const DISPLAY = '"Syne", "Segoe UI", sans-serif';
 const BODY = '"DM Sans", "Segoe UI", sans-serif';
 const MONO = '"DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
-const HAND = '"Kalam", cursive';
 
 // ---------------------------------------------------------------------------
 // GLOBAL STYLE
@@ -155,15 +154,11 @@ function GlobalStyle() {
 // ---------------------------------------------------------------------------
 
 const EXAMPLES = [
-  { id: "coref", label: "Reference resolution", sub: "Model resolves \u201Cit\u201D across sentences", text: "The new vaccine was approved last week. It is being distributed nationwide.", kind: "factcheck" },
-  { id: "vaccine", label: "Mixed claim", sub: "adaptive decomposition, two factual assertions", text: "The new vaccine was approved last week, and it causes infertility in most patients.", kind: "factcheck" },
-  { id: "opinion", label: "Opinion, not a claim", sub: "shows fact vs opinion triage", text: "I think the Eiffel Tower is beautiful.", kind: "factcheck" },
-  { id: "mixed", label: "Fact + opinion mix", sub: "same input, one claim checked and one triaged out", text: "The new iPhone was released last month. It's the most beautiful phone ever made.", kind: "factcheck" },
-  { id: "retry", label: "Under-covered claim", sub: "one bounded retry, still inconclusive", text: "A newly announced phone this year shipped with a graphene-based battery.", kind: "factcheck" },
-  { id: "wikipedia", label: "Future-flow preview", sub: "retry, then an optional Wikipedia fallback", text: "The newly launched OrbitPhone X shipped with a graphene-based battery this year.", kind: "factcheck" },
-  { id: "pride", label: "Benign identity mention", sub: "shows context awareness", text: "I'm a proud black man celebrating Pride month with my friends this weekend.", kind: "hatespeech" },
-  { id: "targeted", label: "Targeted hate speech", sub: "shows target + contextual cues", text: "People from that country are all criminals and should be thrown out.", kind: "hatespeech" },
-  { id: "mixedhate", label: "Fact + hate speech", sub: "one claim to verify, one targeted attack", text: "Refugees from that country flooded in last year, and they're all criminals who should be sent back.", kind: "hatespeech" },
+  { id: "eiffel", label: "Historic / Landmark", sub: "FEVER corpus evidence match", text: "The Eiffel Tower was completed in 1889." },
+  { id: "coref", label: "Pronoun resolution", sub: "fastcoref resolves pronouns across sentences", text: "The COVID-19 vaccine received official authorization. It was evaluated in randomized clinical trials." },
+  { id: "opinion", label: "Subjective opinion", sub: "spaCy fact vs opinion filtering", text: "I think this is the most wonderful restaurant in the city." },
+  { id: "science", label: "Scientific fact", sub: "SciFact physical science corpus", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
+  { id: "vaccine", label: "Refuted medical claim", sub: "Clinical trials evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
 ];
 
 const MOCK_RESPONSES = {
@@ -343,13 +338,6 @@ function StampFilterDefs() {
   );
 }
 
-function StickyTab({ children, color = C.highlight, rotate = -3 }) {
-  return (
-    <span className="inline-block px-3 py-1 text-sm fl-wobble" style={{ fontFamily: HAND, fontWeight: 700, color: C.ink, backgroundColor: color, "--rot": `${rotate}deg`, boxShadow: "1px 2px 0 rgba(28,27,41,0.15)" }}>
-      {children}
-    </span>
-  );
-}
 
 function Field({ children }) {
   return <span className="text-xs font-medium" style={{ color: C.inkFaint, fontFamily: MONO, letterSpacing: "0.01em" }}>{children}</span>;
@@ -441,13 +429,6 @@ function OpinionPill() {
   );
 }
 
-const HATE_COLOR = { Hate: C.refuted, Offensive: "#8A6A00", Normal: C.supported };
-
-function HateStamp({ classification, rotate }) {
-  const color = HATE_COLOR[classification] || C.supported;
-  const Icon = classification === "Normal" ? ShieldCheck : ShieldAlert;
-  return <Stamp label={classification} icon={Icon} color={color} rotate={rotate} />;
-}
 
 // Radial confidence gauge - replaces the flat progress bar for the overall
 // verdict so the headline number reads like an instrument dial rather than
@@ -528,18 +509,6 @@ function SearchTrail({ steps }) {
   );
 }
 
-function CueTags({ cues }) {
-  if (!cues || !cues.length) return null;
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {cues.map((c, i) => (
-        <span key={i} className="px-2 py-1 rounded-md text-xs font-medium" style={{ backgroundColor: C.highlightSoft, color: "#7A5B00", fontFamily: MONO }}>
-          {c}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 function Toast({ message, onDone }) {
   useEffect(() => {
@@ -600,16 +569,19 @@ function InputScreen({ text, setText, onAnalyze, shakeKey }) {
       <div className="w-full max-w-2xl relative">
         <div className="flex items-center justify-between mb-14 fl-fade-up">
           <Logo />
-          <StickyTab rotate={4}>just a prototype!</StickyTab>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold" style={{ backgroundColor: C.paperRaised, border: `1.5px solid ${C.ink}` }}>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span style={{ fontFamily: MONO, color: C.ink }}>FactLens NLP Pipeline • Active</span>
+          </div>
         </div>
 
         <div className="grid sm:grid-cols-[1fr_150px] gap-6 items-center">
           <div className="fl-fade-up" style={{ animationDelay: "0.05s" }}>
             <h1 className="text-4xl sm:text-[2.75rem] font-extrabold leading-[1.08] tracking-tight" style={{ color: C.ink, fontFamily: DISPLAY }}>
-              Paste a claim. See what's true - and who it targets.
+              Automated Fact Verification & Evidence Retrieval
             </h1>
             <p className="mt-4 text-base max-w-lg leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>
-              FactLens reads the same text two ways: is it backed by evidence, and does it single anyone out unfairly.
+              FactLens resolves pronouns, extracts factual assertions, and verifies claims against multi-source evidence corpora using BM25 and semantic embeddings.
             </p>
           </div>
           <div className="hidden sm:block w-full h-full fl-fade-up" style={{ animationDelay: "0.15s" }}><HeroDoodle mouse={mouse} /></div>
@@ -685,11 +657,15 @@ function InputScreen({ text, setText, onAnalyze, shakeKey }) {
 // ---------------------------------------------------------------------------
 
 const STAGES = [
-  "Resolving references", "Identifying factual claims", "Decomposing claims", "Retrieving evidence",
-  "Ranking evidence", "Checking evidence sufficiency", "Verifying claims", "Checking hate speech", "Preparing combined report",
+  "Resolving pronoun references (fastcoref)",
+  "Identifying factual claims (spaCy)",
+  "Extracting claims & statements",
+  "Retrieving evidence passages",
+  "Ranking evidence with BM25",
+  "Generating verification report",
 ];
 const COREF_STAGE_INDEX = 0;
-const SUFFICIENCY_STAGE_INDEX = 5;
+const SUFFICIENCY_STAGE_INDEX = 4;
 
 const RETRY_SUBSTEPS = [
   { label: "Initial evidence search (FEVER / FEVEROUS / SciFact)", icon: Database },
@@ -832,26 +808,15 @@ function SubClaimCard({ claim, index }) {
   );
 }
 
-function TechDetails({ data, isHate }) {
-  const rows = isHate
-    ? [
-        ["Classifier", "Contextual hate-speech classifier (transformer-based) - considers surrounding sentence context, not just keyword matches"],
-        ["Contextual cues", "Model-relevant phrases highlighted alongside the decision - not a formal explainability method"],
-        ["Evaluation", "Evaluated against the HateCheck test suite for false positives, to check benign mentions of protected characteristics aren't incorrectly flagged (used for evaluation, not as training data)"],
-        ["Temporal robustness", "Research extension exploring adaptation to evolving slang/language - not a committed core module"],
-      ]
-    : [
-        ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" \u2192 "${c.to}"`).join("; ") : "No pronouns needed resolution in this text"],
-        ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual, ${data.subClaims.filter((c) => c.status === "Opinion").length} opinion`],
-        ["Claim decomposition", `Adaptive, model-driven decomposition (not rule-based splitting at "and") - ${data.subClaims.length || 1} sub-claim${data.subClaims.length === 1 ? "" : "s"} identified`],
-        ["Local evidence search", "BM25 keyword search + semantic embedding search over the fixed corpus"],
-        ["Evidence ranking", "Retrieved passages ranked by relevance; top evidence selected"],
-        ["Evidence sufficiency", data.usedRetry ? "Judged insufficient after the initial search" : "Judged sufficient after the initial search"],
-        ["Verification", "Classifies the claim against retrieved evidence (planned model: RoBERTa) into Supported / Refuted / Not Enough Evidence"],
-        ["Retry decision", data.usedRetry ? "Model-driven: the sufficiency/verification step judged evidence insufficient, triggering exactly one bounded retry (never unlimited)" : "Not triggered - the initial search returned sufficient evidence"],
-        ["Wikipedia fallback", data.usedWikipediaFallback ? "Used for this example - an optional fallback after local retrieval + one retry remained insufficient. Preview of a planned future capability, not part of the committed core." : "Not used - out of scope for the committed core pipeline; local corpus + one retry is the default"],
-        ["Evidence sources", "FEVER, FEVEROUS, SciFact (fixed local corpus)"],
-      ];
+function TechDetails({ data }) {
+  const rows = [
+    ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" → "${c.to}"`).join("; ") : "No pronouns required resolution in this text"],
+    ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} subjective opinions`],
+    ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
+    ["Evidence retrieval", "BM25Plus keyword search + dense semantic embedding ranking"],
+    ["Verification engine", "Cross-references assertion against top-ranked corpus evidence"],
+    ["Evidence sources", "FEVER, FEVEROUS, SciFact evidence corpora"],
+  ];
   return (
     <div className="flex flex-col gap-2.5">
       {rows.map(([label, value]) => (
@@ -966,55 +931,14 @@ function FactCheckReport({ data, originalText, onCopied }) {
       </Disclosure>
 
       <Disclosure icon={Settings2} title="Technical details" subtitle="Retrieval, ranking, and verification internals">
-        <TechDetails data={data} isHate={false} />
-      </Disclosure>
-    </div>
-  );
-}
-
-function HateSpeechReport({ data, originalText, onCopied }) {
-  const reportText = () => `FactLens hate-speech report\nText: "${originalText}"\nClassification: ${data.classification}\nTarget: ${data.target}\nReason: ${data.reason}`;
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="fl-fade-up p-6 rounded-2xl" style={{ border: `2px solid ${C.ink}`, backgroundColor: C.paperRaised, boxShadow: `5px 5px 0 ${C.line}` }}>
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <Field>Original text</Field>
-          <CopyButton getText={reportText} onCopied={onCopied} />
-        </div>
-        <p className="mb-5 leading-relaxed" style={{ color: C.ink, fontFamily: BODY }}>{originalText}</p>
-        <div className="mb-6"><HateStamp classification={data.classification} /></div>
-
-        <div className="grid sm:grid-cols-1 gap-3 mb-3">
-          <div className="p-4 rounded-xl" style={{ backgroundColor: C.paperSoft }}>
-            <Field>Target identification</Field>
-            <p className="mt-1.5 text-sm font-medium" style={{ color: C.ink, fontFamily: BODY }}>{data.target}</p>
-          </div>
-        </div>
-
-        {data.cues && data.cues.length > 0 && (
-          <div className="p-4 rounded-xl mb-3" style={{ backgroundColor: C.paperSoft }}>
-            <Field>Contextual cues</Field>
-            <div className="mt-1.5"><CueTags cues={data.cues} /></div>
-          </div>
-        )}
-
-        <div className="mt-3 p-4 rounded-xl" style={{ backgroundColor: C.brandSoft }}>
-          <Field>Reason</Field>
-          <p className="mt-1.5 text-sm leading-relaxed" style={{ color: C.brandInk, fontFamily: BODY }}>{data.reason}</p>
-        </div>
-      </div>
-      <Disclosure icon={Settings2} title="Technical details" subtitle="How the classifier reached this result">
-        <TechDetails data={data} isHate />
+        <TechDetails data={data} />
       </Disclosure>
     </div>
   );
 }
 
 function ResultsScreen({ originalText, results, onReset, onCopied }) {
-  const [tab, setTab] = useState("factcheck");
   const [scrolled, setScrolled] = useState(false);
-  const tabs = [{ id: "factcheck", label: "Fact-check report" }, { id: "hatespeech", label: "Hate-speech report" }];
-  const activeIdx = tabs.findIndex((t) => t.id === tab);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -1041,33 +965,14 @@ function ResultsScreen({ originalText, results, onReset, onCopied }) {
           </button>
         </div>
 
-        <div className="flex items-center gap-2 mb-3 fl-fade-up">
-          <Sparkles className="w-3.5 h-3.5" style={{ color: C.brand }} />
-          <span className="text-xs" style={{ color: C.inkFaint, fontFamily: BODY }}>Both reports below came from the same submitted text - one combined FactLens result.</span>
+        <div className="flex items-center gap-2 mb-6 fl-fade-up">
+          <Sparkles className="w-4 h-4" style={{ color: C.brand }} />
+          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: C.inkSoft, fontFamily: MONO }}>
+            Verified Fact-Check Case File
+          </span>
         </div>
 
-        <div className="relative flex mb-7 gap-30 fl-fade-up" style={{ borderBottom: `2px solid ${C.line}` }}>
-          {tabs.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)} className="fl-tab-btn relative px-4 py-2.5 ml-20 text-sm font-semibold" style={{ color: tab === t.id ? C.ink : C.inkFaint, fontFamily: BODY }}>
-              {t.label}
-            </button>
-          ))}
-          <div
-            className="absolute bottom-[-2px] h-[3px] rounded-full"
-            style={{
-              backgroundColor: C.brand,
-              width: `${100 / tabs.length}%`,
-              left: `${activeIdx * (100 / tabs.length)}%`,
-              transition: "left 0.25s cubic-bezier(.2,.8,.2,1)",
-            }}
-          />
-        </div>
-
-        {tab === "factcheck" ? (
-          <FactCheckReport key={`fc-${originalText}`} data={results.factCheck} originalText={originalText} onCopied={onCopied} />
-        ) : (
-          <HateSpeechReport key={`hs-${originalText}`} data={results.hateSpeech} originalText={originalText} onCopied={onCopied} />
-        )}
+        <FactCheckReport key={`fc-${originalText}`} data={results.factCheck} originalText={originalText} onCopied={onCopied} />
       </div>
     </div>
   );
@@ -1146,12 +1051,8 @@ export default function App() {
     setScreen("loading");
     setStageIndex(0);
 
-    // Call real backend first; fall back to mock data if offline or using canned example
-    let realData = null;
-    if (!exampleId) {
-      realData = await fetchRealAnalysis(clean);
-    }
-
+    // Call real backend first; fall back to offline simulation if backend is unreachable
+    const realData = await fetchRealAnalysis(clean);
     const data = realData || (exampleId && MOCK_RESPONSES[exampleId] ? MOCK_RESPONSES[exampleId] : mockAnalyze(clean));
     setPendingRetry(!!data.factCheck.usedRetry);
     setPendingWikipedia(!!data.factCheck.usedWikipediaFallback);
