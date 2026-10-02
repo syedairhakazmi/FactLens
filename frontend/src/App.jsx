@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Search, ShieldAlert, ShieldCheck, ChevronRight, ChevronDown,
+  Search, ShieldAlert, ShieldCheck, ChevronDown,
   CheckCircle2, XCircle, HelpCircle, ArrowLeft, Loader2,
   FileText, AlertTriangle, Globe2, Database, ArrowUpRight, Sparkles,
   ArrowRight, Settings2, Link2, RefreshCw, MessageSquare, Copy, Check,
-  Clock, Folder, Command, X
+  Command
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -711,11 +711,10 @@ function LoadingScreen({ stageIndex, usedRetry, usedWikipediaFallback, corefCoun
   const substeps = usedWikipediaFallback ? WIKI_SUBSTEPS : RETRY_SUBSTEPS;
 
   useEffect(() => {
-    if (stageIndex !== SUFFICIENCY_STAGE_INDEX || !usedRetry) { setSubStep(0); return; }
-    setSubStep(0);
+    if (stageIndex !== SUFFICIENCY_STAGE_INDEX || !usedRetry) return;
     const timers = substeps.slice(1).map((_, idx) => setTimeout(() => setSubStep(idx + 1), 220 * (idx + 1)));
     return () => timers.forEach(clearTimeout);
-  }, [stageIndex, usedRetry, usedWikipediaFallback]);
+  }, [stageIndex, usedRetry, usedWikipediaFallback, substeps]);
 
   const progressPct = Math.min(100, (stageIndex / STAGES.length) * 100);
 
