@@ -1,5 +1,8 @@
 # FactLens
 
+![CI](https://github.com/syedairhakazmi/FactLens/actions/workflows/ci.yml/badge.svg?branch=develop)
+![Deploy](https://github.com/syedairhakazmi/FactLens/actions/workflows/cd.yml/badge.svg?branch=main)
+
 Fact-checking and hate speech detection platform, FYP at FAST-NUCES.
 
 ## Repository structure
@@ -11,46 +14,53 @@ factlens/
 │   ├── app/          One folder per module, matches Work Division ownership
 │   ├── tests/        pytest test suite, run automatically by CI on every push
 │   └── requirements.txt
-├── frontend/         The clickable prototype goes here, and later becomes
-│                     the real product frontend as Iteration 1+ replaces
-│                     the mocked data with real API calls
+├── frontend/         React + Vite prototype — becomes the real product
+│   ├── src/          React components (App.jsx is the main UI)
+│   ├── public/       Static assets (favicon, icons)
+│   └── package.json
 └── .github/
     └── workflows/
-        └── ci.yml    Runs the backend test suite automatically on every push
-                       and pull request, see the CI/CD section below
+        ├── ci.yml    CI — runs backend tests + frontend build on push & PR
+        └── cd.yml    CD — auto-deploys frontend to GitHub Pages on merge to main
 ```
-
-## Where the prototype goes
-
-The React prototype built for the proposal defense PoC belongs in
-`frontend/`. It's real, working frontend code, not throwaway, the plan has
-always been for it to carry forward into Iteration 1's actual frontend, so
-it should live in this repo alongside the backend, not sit separately.
-
-To add it: copy `factlens_prototype.jsx` into `frontend/src/`, along with
-a proper `package.json` once you set it up as a real Vite project (see the
-earlier setup steps for `npm create vite@latest`). Commit it on its own
-branch, e.g. `feature/prototype-import`, same as any other piece of work,
-then open a pull request into `develop`.
 
 ## Branching model
 
-- `main`, always working, nothing is pushed here directly
-- `develop`, integration branch, finished features land here first
-- `feature/<name>`, one branch per piece of work, merged into `develop`
+- `main` — always working, nothing is pushed here directly
+- `develop` — integration branch, finished features land here first
+- `feature/<name>` — one branch per piece of work, merged into `develop`
   via pull request once CI passes
 
 ## Running tests locally
 
-```
+### Backend
+```bash
 cd backend
 pip install -r requirements.txt
+pip install pytest
 python -m spacy download en_core_web_sm
 python -m pytest tests/ -v
 ```
 
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev     # start dev server
+npm run build   # production build
+npm run lint    # check code quality
+```
+
 ## CI/CD
 
-Every push and pull request automatically installs dependencies and runs
-the full test suite via GitHub Actions (`.github/workflows/ci.yml`). A
-pull request should not be merged into `develop` unless this check passes.
+### Continuous Integration (CI)
+Every push and pull request to `main` or `develop` triggers two parallel jobs:
+1. **Backend Tests** — installs Python deps, downloads spaCy model, runs pytest
+2. **Frontend Build** — installs Node deps, runs ESLint, builds the Vite project
+
+A pull request should not be merged unless both checks pass.
+
+### Continuous Deployment (CD)
+When code is merged into `main`, the frontend is automatically built and
+deployed to **GitHub Pages**. This gives us a live, always-updated demo URL
+that the evaluators can access at any time.
