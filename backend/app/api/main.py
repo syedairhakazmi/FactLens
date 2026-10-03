@@ -42,8 +42,8 @@ app.add_middleware(
 DEFAULT_EVIDENCE_CORPUS: list[tuple[str, str]] = [
     # Health & Medical (SciFact / WHO)
     (
-        "Clinical trials and observational studies of over 1.2 million individuals found no statistically "
-        "significant link between mRNA vaccines and fertility outcomes or pregnancy complications.",
+        "Clinical trials and observational studies of over 1.2 million individuals confirm that "
+        "the COVID-19 vaccine does not cause infertility or pregnancy complications.",
         "SciFact starter seed (ID: 4128)",
     ),
     (
