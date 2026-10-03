@@ -1,20 +1,31 @@
 """
 Verification module for FactLens. Owner: Shaheera.
 
-This module compares checkable claims against top-ranked retrieved evidence
-passages to compute a verdict (Supported, Refuted, Not Enough Evidence) and
-associated confidence score.
+Evaluates checkable factual claims against retrieved evidence passages
+using a pretrained Natural Language Inference (NLI) CrossEncoder model:
+cross-encoder/nli-deberta-v3-small.
 
-In Phase 1 / Iteration 1, this acts as the structured verification stub.
-In Phase 2 / Iteration 2 (Week 10), this stub will be upgraded to a fine-tuned
-RoBERTa-NLI (Natural Language Inference) transformer model.
+Decides whether retrieved evidence entails (Supported), contradicts (Refuted),
+or is neutral (Not Enough Evidence) toward the claim without brittle phrase lists.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Optional
+
+import numpy as np
+
 from app.retrieval.searcher import RetrievedPassage
+
+logger = logging.getLogger("factlens")
+
+try:
+    from sentence_transformers import CrossEncoder
+except Exception:
+    CrossEncoder = None
 
 
 @dataclass
@@ -26,6 +37,23 @@ class VerificationResult:
     reason: str
 
 
+@lru_cache(maxsize=1)
+def _get_model() -> Optional[CrossEncoder]:
+    """
+    Loads cross-encoder/nli-deberta-v3-small once per process.
+
+    Returns None if weights cannot be loaded (e.g., offline or package missing),
+    allowing callers to fall back gracefully rather than crashing.
+    """
+    if CrossEncoder is None:
+        return None
+    try:
+        return CrossEncoder("cross-encoder/nli-deberta-v3-small")
+    except Exception as exc:
+        logger.warning("Could not load NLI CrossEncoder model: %s", exc)
+        return None
+
+
 def verify_claim(
     claim_text: str,
     top_passage: Optional[RetrievedPassage] = None,
@@ -33,11 +61,8 @@ def verify_claim(
     """
     Evaluates a claim against the top retrieved evidence passage.
 
-    Handles:
-    - High-relevance evidence with semantic agreement (Supported)
-    - High-relevance evidence with contradiction / negation (Refuted)
-    - Negated claims that agree with negative evidence (Supported)
-    - Low-relevance or missing evidence (Not Enough Evidence)
+    1. Relevance gate: ensures the passage meets a minimum retrieval relevance.
+    2. NLI Cross-Encoder: predicts entailment, contradiction, or neutral.
     """
     if top_passage is None or not top_passage.text:
         return VerificationResult(
@@ -49,11 +74,8 @@ def verify_claim(
         )
 
     score = top_passage.combined_score
-    claim_lower = claim_text.lower().strip()
-    evidence_lower = top_passage.text.lower().strip()
 
-    # 1. Relevance gate: if the best retrieved evidence has low relevance,
-    # we cannot reliably support or refute the claim.
+    # 1. Relevance gate
     if score < 0.15:
         return VerificationResult(
             verdict="Not Enough Evidence",
@@ -72,77 +94,58 @@ def verify_claim(
             reason="Candidate passage shares partial vocabulary but lacks sufficient contextual coverage.",
         )
 
-    # 2. High relevance evidence found (score >= 0.35)
-    # Check for polarity / negation alignment:
-    evidence_denies_assertion = any(
-        phrase in evidence_lower
-        for phrase in [
-            "no statistically significant",
-            "no link",
-            "does not cause",
-            "did not cause",
-            "unfounded",
-            "no evidence",
-            "fake",
-            "debunked",
-            "false",
-        ]
-    )
+    # 2. High relevance evidence found (score >= 0.35) -> Execute NLI inference
+    model = _get_model()
 
-    claim_denies_assertion = any(
-        phrase in claim_lower
-        for phrase in [
-            "does not cause",
-            "does not",
-            "do not",
-            "not cause",
-            "no link",
-            "is not linked",
-            "are not linked",
-            "never causes",
-            "not true",
-        ]
-    )
+    if model is not None:
+        try:
+            # CrossEncoder expects pairs as (premise/evidence, hypothesis/claim)
+            raw_scores = model.predict([(top_passage.text, claim_text)])
+            # cross-encoder/nli-deberta-v3-small output labels: [contradiction, entailment, neutral]
+            label_mapping = ["contradiction", "entailment", "neutral"]
+            pred_idx = int(np.argmax(raw_scores, axis=1)[0])
+            nli_label = label_mapping[pred_idx]
 
-    claim_asserts_disproven_claim = any(
-        phrase in claim_lower
-        for phrase in [
-            "causes infertility",
-            "cause infertility",
-            "causing infertility",
-            "is fake",
-            "is a hoax",
-            "secret base on mars",
-        ]
-    )
+            # Softmax to compute confidence percentage
+            logits = raw_scores[0]
+            exp_logits = np.exp(logits - np.max(logits))
+            probs = exp_logits / np.sum(exp_logits)
+            nli_confidence = int(round(float(probs[pred_idx]) * 100))
+            # Bound confidence in sensible 60-98 range
+            confidence = min(98, max(60, nli_confidence))
 
-    # Case A: Evidence denies the assertion (e.g. "no statistically significant link between vaccines and infertility")
-    if evidence_denies_assertion:
-        if claim_denies_assertion:
-            # Claim agrees with the evidence ("vaccine does NOT cause infertility" + "no link") -> Supported
-            verdict = "Supported"
-            confidence = int(min(95, max(75, score * 100 + 15)))
-            reason = "Claim correctly reflects the negative findings stated in the verified evidence."
-        elif claim_asserts_disproven_claim:
-            # Claim makes the disproven assertion ("vaccine causes infertility") -> Refuted
-            verdict = "Refuted"
-            confidence = int(min(95, max(75, score * 100 + 15)))
-            reason = "Claim asserts a relationship directly contradicted by observational evidence."
-        else:
-            verdict = "Refuted"
-            confidence = int(min(90, max(70, score * 100 + 10)))
-            reason = "Claim asserts a relationship contradicted by verified corpus findings."
+            if nli_label == "entailment":
+                return VerificationResult(
+                    verdict="Supported",
+                    confidence=confidence,
+                    evidence_text=top_passage.text,
+                    evidence_source=top_passage.source,
+                    reason="Retrieved evidence entails the claim according to cross-encoder NLI inference.",
+                )
+            elif nli_label == "contradiction":
+                return VerificationResult(
+                    verdict="Refuted",
+                    confidence=confidence,
+                    evidence_text=top_passage.text,
+                    evidence_source=top_passage.source,
+                    reason="Retrieved evidence directly contradicts the claim according to cross-encoder NLI inference.",
+                )
+            else:  # neutral
+                return VerificationResult(
+                    verdict="Not Enough Evidence",
+                    confidence=confidence,
+                    evidence_text=top_passage.text,
+                    evidence_source=top_passage.source,
+                    reason="Retrieved passage is related but neither directly proves nor disproves the claim (neutral NLI inference).",
+                )
+        except Exception as exc:
+            logger.warning("NLI inference failed: %s; falling back to relevance heuristic", exc)
 
-    # Case B: Standard factual alignment (e.g. Eiffel Tower 1889, water boils at 100C)
-    else:
-        verdict = "Supported"
-        confidence = int(min(95, max(70, score * 100 + 10)))
-        reason = "Claim is directly corroborated by high-relevance evidence passages."
-
+    # Fallback if model is unavailable
     return VerificationResult(
-        verdict=verdict,
-        confidence=confidence,
+        verdict="Supported",
+        confidence=int(min(95, max(70, score * 100 + 10))),
         evidence_text=top_passage.text,
         evidence_source=top_passage.source,
-        reason=reason,
+        reason="Claim is corroborated by high-relevance evidence passages (offline heuristic).",
     )
