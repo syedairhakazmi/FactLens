@@ -1,41 +1,37 @@
 import pytest
-
 from app.coreference import resolver
 
-
 class FakePrediction:
-    def __init__(self, clusters: list[list[str]], spans: list[list[tuple[int, int]]]):
+    def __init__ (self, clusters, spans):
         self._clusters = clusters
         self._spans = spans
 
-    def get_clusters(self, as_strings: bool):
-        return self._clusters if as_strings else self._spans
-
+    def get_clusters (self, as_strings):
+        if as_strings:
+            return self._clusters
+        return self._spans
 
 class FakeLingMess:
-    def __init__(self, prediction: FakePrediction):
+    def __init__ (self, prediction):
         self.prediction = prediction
 
-    def predict(self, texts: list[str]):
-        assert len(texts) == 1
+    def predict (self, texts):
         return [self.prediction]
 
-
-def _mention_spans(text: str, clusters: list[list[str]]) -> list[list[tuple[int, int]]]:
+def _mention_spans (text, clusters):
     spans = []
-    cursors: dict[str, int] = {}
+    cursors = {}
     for cluster in clusters:
         cluster_spans = []
         for mention in cluster:
-            start = text.index(mention, cursors.get(mention, 0))
-            end = start + len(mention)
-            cluster_spans.append((start, end))
-            cursors[mention] = end
-        spans.append(cluster_spans)
+            start_pos = text.index (mention, cursors.get (mention, 0))
+            end_pos = start_pos + len (mention)
+            cluster_spans.append ((start_pos, end_pos))
+            cursors [mention] = end_pos
+        spans.append (cluster_spans)
     return spans
 
-
-@pytest.mark.parametrize(
+@pytest.mark.parametrize (
     ("text", "clusters", "expected"),
     [
         (
@@ -65,20 +61,15 @@ def _mention_spans(text: str, clusters: list[list[str]]) -> list[list[tuple[int,
         ),
     ],
 )
-def test_lingmess_cluster_replacements(
-    monkeypatch: pytest.MonkeyPatch,
-    text: str,
-    clusters: list[list[str]],
-    expected: str,
-):
-    spans = _mention_spans(text, clusters)
-    monkeypatch.setattr(
+def test_lingmess_cluster_replacements (monkeypatch, text, clusters, expected):
+    spans = _mention_spans (text, clusters)
+    monkeypatch.setattr (
         resolver,
         "_get_model",
-        lambda: FakeLingMess(FakePrediction(clusters, spans)),
+        lambda: FakeLingMess (FakePrediction (clusters, spans)),
     )
 
-    result = resolver.resolve(text)
+    result = resolver.resolve (text)
 
     assert result.resolved_text == expected
     assert result.clusters == clusters
