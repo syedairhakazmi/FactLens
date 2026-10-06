@@ -24,7 +24,7 @@ def _tokenize (text):
     # make text lowercase
     text = text.lower ()
 
-    # remove punctuation symbols using basic python
+    # remove punctuation symbols
     for symbol in string.punctuation:
         text = text.replace (symbol, " ")
 
