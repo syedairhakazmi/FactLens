@@ -154,11 +154,11 @@ function GlobalStyle() {
 // ---------------------------------------------------------------------------
 
 const EXAMPLES = [
-  { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "FEVER corpus evidence match", text: "The Eiffel Tower was completed in 1889." },
+  { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "Local corpus evidence match", text: "The Eiffel Tower was completed in 1889." },
   { id: "coref", kind: "factcheck", label: "Pronoun resolution", sub: "fastcoref resolves pronouns across sentences", text: "The COVID-19 vaccine received official authorization. It was evaluated in randomized clinical trials." },
   { id: "opinion", kind: "factcheck", label: "Subjective opinion", sub: "spaCy fact vs opinion filtering", text: "I think this is the most wonderful restaurant in the city." },
-  { id: "science", kind: "factcheck", label: "Scientific fact", sub: "SciFact physical science corpus", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
-  { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "Clinical trials evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
+  { id: "science", kind: "factcheck", label: "Scientific fact", sub: "Local corpus physical science match", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
+  { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "Local corpus evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
 ];
 
 const MOCK_RESPONSES = {
@@ -167,8 +167,8 @@ const MOCK_RESPONSES = {
       overallVerdict: "Supported", overallConfidence: 86, allOpinion: false, usedRetry: false, usedWikipediaFallback: false,
       corefResolutions: [{ from: "It", to: "The new vaccine" }],
       subClaims: [
-        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 89, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "FEVER corpus" },
-        { text: "It is being distributed nationwide.", resolvedText: "The new vaccine is being distributed nationwide.", status: "Fact", verdict: "Supported", confidence: 82, evidence: "Distribution announcements confirm a nationwide rollout following approval.", source: "FEVEROUS corpus" },
+        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 89, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "Local corpus" },
+        { text: "It is being distributed nationwide.", resolvedText: "The new vaccine is being distributed nationwide.", status: "Fact", verdict: "Supported", confidence: 82, evidence: "Distribution announcements confirm a nationwide rollout following approval.", source: "Local corpus" },
       ],
     },
     hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "No targeted or dehumanizing language detected." },
@@ -177,8 +177,8 @@ const MOCK_RESPONSES = {
     factCheck: {
       overallVerdict: "Refuted", overallConfidence: 91, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [
-        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 88, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "FEVER corpus" },
-        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - adaptive decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "SciFact corpus" },
+        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 88, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "Local corpus" },
+        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - adaptive decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "Local corpus" },
       ],
     },
     hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "No targeted or dehumanizing language detected." },
@@ -187,8 +187,8 @@ const MOCK_RESPONSES = {
     factCheck: {
       overallVerdict: "Supported", overallConfidence: 79, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [
-        { text: "Refugees from that country arrived last year.", status: "Fact", verdict: "Supported", confidence: 79, evidence: "Immigration records confirm an increase in arrivals from that origin during the stated period.", source: "FEVER corpus" },
-        { text: "They're all criminals who should be sent back.", status: "Fact", note: "Framed as a factual claim about a group, but it's an unsupported generalization rather than a checkable statistic.", verdict: "Refuted", confidence: 88, evidence: "No data supports criminality as characteristic of the group; crime-rate studies show no such pattern.", source: "SciFact corpus" },
+        { text: "Refugees from that country arrived last year.", status: "Fact", verdict: "Supported", confidence: 79, evidence: "Immigration records confirm an increase in arrivals from that origin during the stated period.", source: "Local corpus" },
+        { text: "They're all criminals who should be sent back.", status: "Fact", note: "Framed as a factual claim about a group, but it's an unsupported generalization rather than a checkable statistic.", verdict: "Refuted", confidence: 88, evidence: "No data supports criminality as characteristic of the group; crime-rate studies show no such pattern.", source: "Local corpus" },
       ],
     },
     hateSpeech: { classification: "Hate", target: "Refugees from that country / national-origin group", cues: ["that country", "all criminals", "sent back"], reason: "Generalizes an entire group as criminal and calls for their removal - a dehumanizing generalization plus an exclusionary call to action." },
@@ -202,7 +202,7 @@ const MOCK_RESPONSES = {
       overallVerdict: "Supported", overallConfidence: 85, allOpinion: false, usedRetry: false, usedWikipediaFallback: false,
       corefResolutions: [{ from: "It", to: "The new iPhone" }],
       subClaims: [
-        { text: "The new iPhone was released last month.", status: "Fact", verdict: "Supported", confidence: 85, evidence: "Product release announcements confirm the launch date.", source: "FEVER corpus" },
+        { text: "The new iPhone was released last month.", status: "Fact", verdict: "Supported", confidence: 85, evidence: "Product release announcements confirm the launch date.", source: "Local corpus" },
         { text: "It's the most beautiful phone ever made.", status: "Opinion" },
       ],
     },
@@ -213,7 +213,7 @@ const MOCK_RESPONSES = {
       overallVerdict: "Not Enough Evidence", overallConfidence: 54, allOpinion: false, usedRetry: true, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [{
         text: "A newly announced phone this year shipped with a graphene-based battery.", status: "Fact", verdict: "Not Enough Evidence", confidence: 54,
-        evidence: "Neither the initial search nor the one bounded retry over the fixed corpus could confirm this.", source: "FEVEROUS corpus (retry)",
+        evidence: "Neither the initial search nor the one bounded retry over the fixed corpus could confirm this.", source: "Local corpus (retry)",
         searchTrail: [
           { label: "Initial evidence search (local corpus)", state: "done" },
           { label: "Evidence insufficient", state: "warn" },
@@ -287,8 +287,8 @@ function mockAnalyze(text) {
       status: "Fact",
       verdict: verdicts[(hash + i) % 3],
       confidence: 55 + ((hash + i * 13) % 40),
-      evidence: "Retrieved passage overlaps with the claim's key terms and entities from the curated seed corpus.",
-      source: "Curated starter seed corpus (FEVER / SciFact)",
+      evidence: "Retrieved passage overlaps with the claim's key terms and entities from the local corpus.",
+      source: "Local corpus",
       searchTrail: [
         { label: `BM25 keyword score: ${simBm25}`, state: "done" },
         { label: `Semantic embedding score: ${simEmb}`, state: "done" },
@@ -670,13 +670,13 @@ const COREF_STAGE_INDEX = 0;
 const SUFFICIENCY_STAGE_INDEX = 4;
 
 const RETRY_SUBSTEPS = [
-  { label: "Initial evidence search (FEVER / FEVEROUS / SciFact)", icon: Database },
+  { label: "Initial evidence search (local corpus)", icon: Database },
   { label: "Evidence insufficient", icon: AlertTriangle },
   { label: "One bounded retry triggered", icon: RefreshCw },
   { label: "Re-retrieved evidence", icon: CheckCircle2 },
 ];
 const WIKI_SUBSTEPS = [
-  { label: "Initial evidence search (FEVER / FEVEROUS / SciFact)", icon: Database },
+  { label: "Initial evidence search (local corpus)", icon: Database },
   { label: "Evidence insufficient", icon: AlertTriangle },
   { label: "One bounded retry triggered", icon: RefreshCw },
   { label: "Local evidence remains insufficient", icon: AlertTriangle },
@@ -797,9 +797,9 @@ function SubClaimCard({ claim, index }) {
                 <span className="text-xs font-medium w-9 text-right" style={{ color: C.inkSoft, fontFamily: MONO }}>{claim.confidence}%</span>
               </div>
               <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>{claim.evidence}</p>
-              <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full" style={{ color: claim.source.includes("Wikipedia") ? C.info : claim.source.includes("retry") ? C.brand : C.inkSoft, backgroundColor: claim.source.includes("Wikipedia") ? C.infoSoft : claim.source.includes("retry") ? C.brandSoft : C.paperSoft, fontFamily: MONO }}>
+              <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full" style={{ color: claim.source?.includes("Wikipedia") ? C.info : claim.source?.includes("retry") ? C.brand : C.inkSoft, backgroundColor: claim.source?.includes("Wikipedia") ? C.infoSoft : claim.source?.includes("retry") ? C.brandSoft : C.paperSoft, fontFamily: MONO }}>
                 <Database className="w-3.5 h-3.5" />
-                {claim.source}
+                {claim.source?.includes("retry") ? "Local corpus (retry)" : "Local corpus"}
               </div>
               {claim.searchTrail && <SearchTrail steps={claim.searchTrail} />}
             </>
@@ -825,7 +825,7 @@ function TechDetails({ data, isHate = false }) {
         ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
         ["Evidence retrieval", "BM25Plus keyword search + dense semantic embedding ranking"],
         ["Verification engine", "Cross-references assertion against top-ranked corpus evidence"],
-        ["Evidence sources", "Curated starter seed corpus (FEVER, FEVEROUS, SciFact samples)"],
+        ["Evidence sources", "Local evidence corpus"],
       ];
   return (
     <div className="flex flex-col gap-2.5">
@@ -1033,12 +1033,12 @@ function ResultsScreen({ originalText, results, onReset, onCopied }) {
           </span>
         </div>
 
-        <div className="relative flex mb-7 gap-6 fl-fade-up" style={{ borderBottom: `2px solid ${C.line}` }}>
+        <div className="relative grid grid-cols-2 mb-7 fl-fade-up" style={{ borderBottom: `2px solid ${C.line}` }}>
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="fl-tab-btn relative px-4 py-2.5 text-sm font-semibold flex items-center gap-2"
+              className="fl-tab-btn relative py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150"
               style={{ color: tab === t.id ? C.ink : C.inkFaint, fontFamily: BODY }}
             >
               {t.label}
@@ -1053,8 +1053,8 @@ function ResultsScreen({ originalText, results, onReset, onCopied }) {
             className="absolute bottom-[-2px] h-[3px] rounded-full"
             style={{
               backgroundColor: C.brand,
-              width: `${100 / tabs.length}%`,
-              left: `${activeIdx * (100 / tabs.length)}%`,
+              width: "50%",
+              left: `${activeIdx * 50}%`,
               transition: "left 0.25s cubic-bezier(.2,.8,.2,1)",
             }}
           />
