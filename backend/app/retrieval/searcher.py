@@ -1,47 +1,16 @@
-"""
-Evidence retrieval module. Owner: Irha.
-
-Combines two scoring methods per candidate evidence passage:
-
-1. BM25 (rank_bm25), pure keyword overlap. Fast, needs no pretrained
-   weights, works immediately offline.
-2. Sentence embedding cosine similarity (sentence-transformers), a
-   meaning-based score that catches paraphrases BM25 misses. Needs a
-   pretrained model downloaded from Hugging Face on first run.
-
-Both scores are min-max normalized to [0, 1] within the current query's
-candidate set (not globally), since BM25's raw scores and cosine
-similarity live on incomparable scales. They're then combined as a
-weighted sum. RETRIEVAL_WEIGHT below controls that split, tune it once
-real evaluation data (FEVER / FEVEROUS / SciFact) is wired in.
-"""
-
-from __future__ import annotations
-
-import re
+import string
 from dataclasses import dataclass
 from functools import lru_cache
-
 import numpy as np
 from rank_bm25 import BM25Plus
 
-# Weight given to the embedding score vs. BM25. 0.5 = equal weight.
-# This is a tunable hyperparameter, not a fixed design decision, treat
-# it as something the evaluation plan (Slide 14) should actually sweep.
 RETRIEVAL_WEIGHT_EMBEDDING = 0.5
 
-# A minimal stopword list. Without this, BM25's IDF weighting can be
-# thrown off badly on small corpora, a word like "in" can look
-# statistically "rare" and therefore "important" just because only one
-# passage happens to contain it, even though it's meaningless. This
-# matters less on the real, large FEVER-scale corpus, but it's cheap,
-# standard practice, and worth keeping regardless of corpus size.
 _STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "in", "on", "at", "to", "for", "of", "and", "or", "but", "with",
     "this", "that", "these", "those", "it", "its", "as", "by", "from",
 }
-
 
 @dataclass
 class RetrievedPassage:
@@ -51,107 +20,104 @@ class RetrievedPassage:
     embedding_score: float
     combined_score: float
 
+def _tokenize (text):
+    # make text lowercase
+    text = text.lower ()
 
-def _tokenize(text: str) -> list[str]:
-    # Lowercase, strip punctuation, and drop stopwords, so "patients."
-    # matches "patients", and common words don't distort BM25's IDF
-    # weighting on small corpora. See _STOPWORDS above.
-    tokens = re.findall(r"[a-z0-9]+", text.lower())
-    return [t for t in tokens if t not in _STOPWORDS]
+    # remove punctuation symbols using basic python
+    for symbol in string.punctuation:
+        text = text.replace (symbol, " ")
 
+    # split by spaces to get words
+    words = text.split ()
 
-@lru_cache(maxsize=1)
-def _get_embedding_model():
-    """
-    Returns None if the pretrained model can't be downloaded (e.g. no
-    internet access), so callers can fall back to BM25-only ranking
-    instead of crashing. On a normal machine with internet access this
-    always succeeds, downloading once and caching locally afterward.
-    """
+    # remove useless small words like is the in
+    clean_words = []
+    for word in words:
+        if word not in _STOPWORDS:
+            clean_words.append (word)
+
+    return clean_words
+
+@lru_cache (maxsize = 1)
+def _get_embedding_model ():
+    # load embedding model
     try:
         from sentence_transformers import SentenceTransformer
-        return SentenceTransformer("all-MiniLM-L6-v2")
+        return SentenceTransformer ("all-MiniLM-L6-v2")
     except Exception:
         return None
 
+def _min_max_normalize (scores):
+    # scale scores between 0 and 1
+    min_value = scores.min ()
+    max_value = scores.max ()
+    if max_value == min_value:
+        return np.zeros_like (scores)
+    return (scores - min_value) / (max_value - min_value)
 
-def _min_max_normalize(scores: np.ndarray) -> np.ndarray:
-    if scores.max() == scores.min():
-        return np.zeros_like(scores)
-    return (scores - scores.min()) / (scores.max() - scores.min())
-
-
-def retrieve(
-    query: str,
-    corpus: list[tuple[str, str]],  # list of (passage_text, source_name)
-    top_k: int = 3,
-) -> list[RetrievedPassage]:
-    """
-    Ranks every passage in `corpus` against `query` and returns the
-    top_k highest-scoring ones, each carrying its BM25 score, embedding
-    score, and the combined score that determined its rank.
-    """
-    if not corpus:
+def retrieve (query, corpus, top_k = 3):
+    # search through the corpus to find best passages
+    if len (corpus) == 0:
         return []
 
-    passages = [text for text, _ in corpus]
-    sources = [source for _, source in corpus]
+    passage_texts = []
+    passage_sources = []
+    for text_item, source_item in corpus:
+        passage_texts.append (text_item)
+        passage_sources.append (source_item)
 
-    # --- BM25 half ---
-    tokenized_corpus = [_tokenize(p) for p in passages]
+    # 1. keyword matching with bm25
+    tokenized_passages = []
+    for passage_text in passage_texts:
+        tokenized_passages.append (_tokenize (passage_text))
 
-    # BM25Plus, not BM25Okapi, deliberately. The plain Okapi IDF formula
-    # can hit zero or go negative for any term appearing in half or more
-    # of the corpus, verified this directly on our sample data, "vaccine"
-    # got an IDF of exactly 0.0 despite being the most relevant word in
-    # the query, because it appeared in 2 of our 4 sample passages.
-    # BM25Plus adds a smoothing delta specifically to prevent this. This
-    # matters less on the real, large corpus, but costs nothing to fix
-    # now and avoids the same failure mode resurfacing on any query whose
-    # key terms happen to be common within whatever subset gets searched.
-    bm25 = BM25Plus(tokenized_corpus)
-    bm25_raw = np.array(bm25.get_scores(_tokenize(query)))
-    bm25_norm = _min_max_normalize(bm25_raw)
+    bm25_engine = BM25Plus (tokenized_passages)
+    query_words = _tokenize (query)
+    raw_bm25_scores = np.array (bm25_engine.get_scores (query_words))
+    normalized_bm25_scores = _min_max_normalize (raw_bm25_scores)
 
-    # --- Embedding half ---
-    model = _get_embedding_model()
-    if model is not None:
-        query_vec = model.encode([query])[0]
-        passage_vecs = model.encode(passages)
-        # cosine similarity between the query vector and every passage vector
-        embed_raw = np.array([
-            np.dot(query_vec, p) / (np.linalg.norm(query_vec) * np.linalg.norm(p) + 1e-8)
-            for p in passage_vecs
-        ])
-        embed_norm = _min_max_normalize(embed_raw)
-        weight = RETRIEVAL_WEIGHT_EMBEDDING
+    # 2. meaning matching with embeddings
+    embedding_model = _get_embedding_model ()
+    if embedding_model is not None:
+        query_vector = embedding_model.encode ([query]) [0]
+        passage_vectors = embedding_model.encode (passage_texts)
+
+        similarity_scores = []
+        for passage_vector in passage_vectors:
+            dot_product = np.dot (query_vector, passage_vector)
+            length_product = np.linalg.norm (query_vector) * np.linalg.norm (passage_vector) + 1e-8
+            similarity_scores.append (dot_product / length_product)
+
+        raw_embedding_scores = np.array (similarity_scores)
+        normalized_embedding_scores = _min_max_normalize (raw_embedding_scores)
+        embedding_weight = RETRIEVAL_WEIGHT_EMBEDDING
     else:
-        # Offline fallback: embedding model unavailable, fall back to
-        # BM25-only ranking rather than crashing. NOT the real intended
-        # behavior, only triggers without internet access.
-        embed_raw = np.zeros_like(bm25_raw)
-        embed_norm = embed_raw
-        weight = 0.0
+        raw_embedding_scores = np.zeros_like (raw_bm25_scores)
+        normalized_embedding_scores = raw_embedding_scores
+        embedding_weight = 0.0
 
-    combined = weight * embed_norm + (1 - weight) * bm25_norm
+    # 3. combine keyword and meaning scores
+    final_scores = embedding_weight * normalized_embedding_scores + (1.0 - embedding_weight) * normalized_bm25_scores
 
-    ranked_indices = np.argsort(-combined)[:top_k]
-    return [
-        RetrievedPassage(
-            text=passages[i],
-            source=sources[i],
-            bm25_score=float(bm25_raw[i]),
-            embedding_score=float(embed_raw[i]),
-            combined_score=float(combined[i]),
+    # 4. pick the top scoring passages
+    best_indices = np.argsort (-final_scores) [:top_k]
+
+    top_passages = []
+    for best_index in best_indices:
+        top_passages.append (
+            RetrievedPassage (
+                text = passage_texts [best_index],
+                source = passage_sources [best_index],
+                bm25_score = float (raw_bm25_scores [best_index]),
+                embedding_score = float (raw_embedding_scores [best_index]),
+                combined_score = float (final_scores [best_index]),
+            )
         )
-        for i in ranked_indices
-    ]
 
+    return top_passages
 
 if __name__ == "__main__":
-    # Tiny sample corpus standing in for FEVER/FEVEROUS/SciFact until the
-    # real datasets are wired in. Swap `sample_corpus` for a real loader
-    # once download infrastructure exists, everything else stays the same.
     sample_corpus = [
         ("The Eiffel Tower, located in Paris, France, was completed in 1889 for the World's Fair.", "sample-wiki"),
         ("Clinical trials found no statistically significant link between the vaccine and fertility outcomes.", "sample-scifact"),
@@ -159,11 +125,11 @@ if __name__ == "__main__":
         ("Paris is the capital city of France and home to several major landmarks.", "sample-wiki"),
     ]
 
-    query = "The vaccine causes infertility in most patients."
-    results = retrieve(query, sample_corpus, top_k=2)
+    sample_query = "The vaccine causes infertility in most patients."
+    found_results = retrieve (sample_query, sample_corpus, top_k = 2)
 
-    print(f"QUERY: {query}\n")
-    for r in results:
-        print(f"[{r.combined_score:.3f}] (bm25={r.bm25_score:.3f}, embed={r.embedding_score:.3f}) {r.source}")
-        print(f"  {r.text}")
-        print()
+    print (f"QUERY: {sample_query}\n")
+    for item in found_results:
+        print (f"[{item.combined_score:.3f}] (bm25={item.bm25_score:.3f}, embed={item.embedding_score:.3f}) {item.source}")
+        print (f"  {item.text}")
+        print ()
