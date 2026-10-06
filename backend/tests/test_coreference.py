@@ -46,12 +46,12 @@ def _mention_spans(text: str, clusters: list[list[str]]) -> list[list[tuple[int,
         (
             "Barack Obama served as president. He gave a speech. His words moved him.",
             [["Barack Obama", "He", "His", "him"]],
-            "Barack Obama served as president. Barack Obama gave a speech. Barack Obama words moved Barack Obama.",
+            "Barack Obama served as president. Barack Obama gave a speech. Barack Obama's words moved Barack Obama.",
         ),
         (
             "Mary told John that he could handle it himself.",
             [["John", "he", "himself"]],
-            "Mary told John that John could handle it John.",
+            "Mary told John that John could handle it himself.",
         ),
         (
             "The company hired a CEO. She was confident.",
@@ -61,7 +61,7 @@ def _mention_spans(text: str, clusters: list[list[str]]) -> list[list[tuple[int,
         (
             "The scientists published their paper. They claimed it was conclusive.",
             [["The scientists", "their", "They"], ["paper", "it"]],
-            "The scientists published The scientists paper. The scientists claimed paper was conclusive.",
+            "The scientists published the scientists' paper. The scientists claimed paper was conclusive.",
         ),
     ],
 )
