@@ -34,8 +34,14 @@ def test_first_person_opener_is_caught():
     assert result.is_checkable is False
 
 
-def test_superlative_opinion_is_caught():
-    result = classify("This is the best restaurant in the city.")
+def test_subjective_opinion_is_caught():
+    result = classify("This restaurant is terrible.")
+    assert result.is_checkable is False
+
+
+def test_rule_fallback_catches_copula_opinion():
+    from app.claims.detector import _rule_fallback
+    result = _rule_fallback("This is the best restaurant in the city.")
     assert result.is_checkable is False
 
 
