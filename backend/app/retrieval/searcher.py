@@ -240,13 +240,14 @@ _FULL_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data",
 _GLOBAL_INDEX = None
 
 def get_global_index ():
-    # use the full local corpus if available, otherwise use the smaller git version
+    # use full local corpus if its cache exists or if explicitly requested, otherwise use default dataset corpus
     global _GLOBAL_INDEX
     if _GLOBAL_INDEX is None:
         full_path = os.path.abspath (_FULL_DATASET_FILE)
-        if os.path.exists (full_path):
+        cache_path = os.path.abspath (_FULL_CACHE_FILE)
+        use_full = os.environ.get ("FACTLENS_USE_FULL_CORPUS", "0") == "1" or os.path.exists (cache_path)
+        if use_full and os.path.exists (full_path):
             dataset_path = full_path
-            cache_path = os.path.abspath (_FULL_CACHE_FILE)
         else:
             dataset_path = os.path.abspath (_DEFAULT_DATASET_FILE)
             cache_path = os.path.abspath (_DEFAULT_CACHE_FILE)

@@ -147,7 +147,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
                 )
             )
         else:
-            found_passages = retrieve (classified_item.text, DEFAULT_EVIDENCE_CORPUS, top_k = 1)
+            found_passages = retrieve (classified_item.text, top_k = 1)
             top_passage = None
             if len (found_passages) > 0:
                 top_passage = found_passages [0]

@@ -40,4 +40,4 @@ def test_analyze_factual_claim_retrieves_evidence ():
     assert claim_result ["status"] == "Fact"
     assert claim_result ["verdict"] == "Supported"
     assert "1889" in claim_result ["evidence"]
-    assert "Local corpus" in claim_result ["source"]
+    assert claim_result ["source"] in ["FEVER 2018", "FEVER 2.0", "FEVEROUS", "SciFact", "AVeriTeC 2024", "AVeriTeC 2.0", "Local corpus"]
