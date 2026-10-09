@@ -40,6 +40,7 @@ def verify_claim (claim_text, top_passage = None):
         )
 
     retrieval_score = top_passage.combined_score
+    embedding_score = getattr (top_passage, "embedding_score", 0.0)
 
     # check retrieval score threshold
     if retrieval_score < 0.15:
@@ -51,7 +52,8 @@ def verify_claim (claim_text, top_passage = None):
             reason = "Retrieved candidate scored below the minimum relevance threshold.",
         )
 
-    if retrieval_score < 0.35:
+    # gate low combined score or low semantic embedding similarity (< 0.52)
+    if retrieval_score < 0.35 or embedding_score < 0.52:
         calibrated_confidence = int (retrieval_score * 100 + 15)
         if calibrated_confidence < 45:
             calibrated_confidence = 45
@@ -62,8 +64,8 @@ def verify_claim (claim_text, top_passage = None):
             verdict = "Not Enough Evidence",
             confidence = calibrated_confidence,
             evidence_text = f"Weak candidate evidence found: \"{top_passage.text}\"",
-            evidence_source = f"{top_passage.source} (Low confidence)",
-            reason = "Candidate passage shares partial vocabulary but lacks sufficient contextual coverage.",
+            evidence_source = f"{top_passage.source} (Low relevance)",
+            reason = "Retrieved candidate passage lacks sufficient semantic overlap to verify or refute this claim.",
         )
 
     # run nli cross encoder model
