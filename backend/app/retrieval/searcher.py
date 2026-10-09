@@ -8,6 +8,9 @@ from rank_bm25 import BM25Plus
 
 RETRIEVAL_WEIGHT_EMBEDDING = 0.5
 
+# bge models use an instruction prefix for queries to improve retrieval accuracy
+_BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
 _STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "in", "on", "at", "to", "for", "of", "and", "or", "but", "with",
@@ -45,10 +48,10 @@ def _tokenize (text):
 
 @lru_cache (maxsize = 1)
 def _get_embedding_model ():
-    # load embedding model
+    # load bge-base embedding model (ranked #1 on mteb benchmark for retrieval)
     try:
         from sentence_transformers import SentenceTransformer
-        return SentenceTransformer ("all-MiniLM-L6-v2")
+        return SentenceTransformer ("BAAI/bge-base-en-v1.5")
     except Exception:
         return None
 
@@ -190,7 +193,9 @@ class CorpusIndex:
         # 2. dense meaning scores from embeddings
         embedding_model = _get_embedding_model ()
         if embedding_model is not None and self.passage_vectors is not None:
-            query_vector = embedding_model.encode ([query]) [0]
+            # bge models need a special prefix on queries for best results
+            query_with_prefix = _BGE_QUERY_PREFIX + query
+            query_vector = embedding_model.encode ([query_with_prefix]) [0]
 
             similarity_scores = []
             for passage_vector in self.passage_vectors:
@@ -253,6 +258,159 @@ def retrieve (query, corpus = None, top_k = 3):
     dataset_index = get_global_index ()
     return dataset_index.search (query, top_k = top_k)
 
+def load_scifact_corpus (corpus_file_path):
+    # load scifact corpus (actual scientific abstracts as evidence passages)
+    raw_entries = load_dataset_from_file (corpus_file_path)
+    passages = []
+    for entry in raw_entries:
+        doc_id = str (entry.get ("doc_id", ""))
+        title = entry.get ("title", "")
+        abstract_parts = entry.get ("abstract", [])
+        if isinstance (abstract_parts, list):
+            full_text = " ".join (abstract_parts)
+        else:
+            full_text = str (abstract_parts)
+        if len (full_text.strip ()) > 0:
+            passages.append ({
+                "id": "scifact_" + doc_id,
+                "title": title,
+                "source": "SciFact",
+                "text": full_text.strip (),
+            })
+    return passages
+
+def load_fever_claims (fever_file_path, source_name = "FEVER"):
+    # load fever claims (these are claims with labels, not evidence text)
+    raw_entries = load_dataset_from_file (fever_file_path)
+    passages = []
+    for entry in raw_entries:
+        claim_id = str (entry.get ("id", ""))
+        claim_text = entry.get ("claim", "")
+        label = entry.get ("label", "")
+        if len (claim_text.strip ()) > 0:
+            passages.append ({
+                "id": source_name.lower ().replace (" ", "_") + "_" + claim_id,
+                "title": label,
+                "source": source_name,
+                "text": claim_text.strip (),
+            })
+    return passages
+
+def load_averitec_claims (averitec_file_path, source_name = "AVeriTeC"):
+    # load averitec claims (real world claims with fact checking justifications)
+    raw_entries = load_dataset_from_file (averitec_file_path)
+    passages = []
+    entry_index = 0
+    for entry in raw_entries:
+        claim_text = entry.get ("claim", "")
+        label = entry.get ("label", "")
+        justification = entry.get ("justification", "")
+        # combine claim and justification for richer passage text
+        full_text = claim_text.strip ()
+        if len (justification.strip ()) > 0:
+            full_text = full_text + " " + justification.strip ()
+        if len (full_text.strip ()) > 0:
+            passages.append ({
+                "id": source_name.lower ().replace (" ", "_") + "_" + str (entry_index),
+                "title": label,
+                "source": source_name,
+                "text": full_text.strip (),
+            })
+        entry_index = entry_index + 1
+    return passages
+
+def load_feverous_claims (feverous_file_path):
+    # load feverous claims (claims with labels from wikipedia tables)
+    raw_entries = load_dataset_from_file (feverous_file_path)
+    passages = []
+    for entry in raw_entries:
+        claim_id = str (entry.get ("id", ""))
+        claim_text = entry.get ("claim", "")
+        label = entry.get ("label", "")
+        if len (claim_text.strip ()) > 0:
+            passages.append ({
+                "id": "feverous_" + claim_id,
+                "title": label,
+                "source": "FEVEROUS",
+                "text": claim_text.strip (),
+            })
+    return passages
+
+def merge_all_datasets (dataset_folder_path, output_file_path = None, max_per_dataset = None):
+    # merge all downloaded datasets into one unified corpus
+    all_passages = []
+
+    # scifact corpus (actual evidence abstracts - most important)
+    scifact_corpus_path = os.path.join (dataset_folder_path, "scifact", "data", "corpus.jsonl")
+    if os.path.exists (scifact_corpus_path):
+        scifact_passages = load_scifact_corpus (scifact_corpus_path)
+        if max_per_dataset is not None:
+            scifact_passages = scifact_passages [:max_per_dataset]
+        all_passages = all_passages + scifact_passages
+        print ("loaded " + str (len (scifact_passages)) + " passages from scifact corpus")
+
+    # fever 2018 claims
+    fever_path = os.path.join (dataset_folder_path, "train_fever.jsonl")
+    if os.path.exists (fever_path):
+        fever_passages = load_fever_claims (fever_path, "FEVER 2018")
+        if max_per_dataset is not None:
+            fever_passages = fever_passages [:max_per_dataset]
+        all_passages = all_passages + fever_passages
+        print ("loaded " + str (len (fever_passages)) + " claims from fever 2018")
+
+    # fever 2.0 dev
+    fever2_path = os.path.join (dataset_folder_path, "fever2-fixers-dev.jsonl")
+    if os.path.exists (fever2_path):
+        fever2_passages = load_fever_claims (fever2_path, "FEVER 2.0")
+        if max_per_dataset is not None:
+            fever2_passages = fever2_passages [:max_per_dataset]
+        all_passages = all_passages + fever2_passages
+        print ("loaded " + str (len (fever2_passages)) + " claims from fever 2.0")
+
+    # feverous 2021
+    feverous_path = os.path.join (dataset_folder_path, "feverous_train_challenges.jsonl")
+    if os.path.exists (feverous_path):
+        feverous_passages = load_feverous_claims (feverous_path)
+        if max_per_dataset is not None:
+            feverous_passages = feverous_passages [:max_per_dataset]
+        all_passages = all_passages + feverous_passages
+        print ("loaded " + str (len (feverous_passages)) + " claims from feverous 2021")
+
+    # averitec 2024
+    averitec_path = os.path.join (dataset_folder_path, "train_averitec.json")
+    if os.path.exists (averitec_path):
+        averitec_passages = load_averitec_claims (averitec_path, "AVeriTeC 2024")
+        if max_per_dataset is not None:
+            averitec_passages = averitec_passages [:max_per_dataset]
+        all_passages = all_passages + averitec_passages
+        print ("loaded " + str (len (averitec_passages)) + " claims from averitec 2024")
+
+    # averitec 2.0 2025
+    averitec2_path = os.path.join (dataset_folder_path, "train_avertiec2.0.json")
+    if os.path.exists (averitec2_path):
+        averitec2_passages = load_averitec_claims (averitec2_path, "AVeriTeC 2.0")
+        if max_per_dataset is not None:
+            averitec2_passages = averitec2_passages [:max_per_dataset]
+        all_passages = all_passages + averitec2_passages
+        print ("loaded " + str (len (averitec2_passages)) + " claims from averitec 2.0")
+
+    # remove duplicate texts
+    seen_texts = {}
+    unique_passages = []
+    for passage in all_passages:
+        passage_text_lower = passage ["text"].lower ()
+        if passage_text_lower not in seen_texts:
+            seen_texts [passage_text_lower] = True
+            unique_passages.append (passage)
+
+    print ("total unique passages: " + str (len (unique_passages)))
+
+    if output_file_path is not None:
+        save_dataset_to_file (unique_passages, output_file_path)
+        print ("saved merged corpus to " + output_file_path)
+
+    return unique_passages
+
 def download_huggingface_dataset (dataset_name = "allenai/scifact", split = "train", max_samples = 100, output_file = None):
     # download sample passages from huggingface datasets into jsonl
     try:
@@ -308,3 +466,4 @@ if __name__ == "__main__":
         print (f"[{passage.combined_score:.3f}] (bm25={passage.bm25_score:.3f}, embed={passage.embedding_score:.3f}) [{passage.source}] {passage.title}")
         print (f"  {passage.text}")
         print ()
+
