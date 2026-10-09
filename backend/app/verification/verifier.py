@@ -63,7 +63,7 @@ def verify_claim (claim_text, top_passage = None):
         return VerificationResult (
             verdict = "Not Enough Evidence",
             confidence = calibrated_confidence,
-            evidence_text = f"No verified evidence found in the corpus. (Closest candidate lacked connection: \"{top_passage.text}\")",
+            evidence_text = "No verifiable evidence found in the benchmark corpus to substantiate or disprove this claim.",
             evidence_source = f"{top_passage.source} (No relevant match)",
             reason = "The corpus contains no relevant facts or records regarding this claim, so it cannot be confirmed or debunked.",
         )
@@ -90,11 +90,15 @@ def verify_claim (claim_text, top_passage = None):
             else:
                 final_confidence = raw_confidence
 
+            evidence_summary = top_passage.text
+            if len (evidence_summary) > 350:
+                evidence_summary = evidence_summary [:347].strip () + "..."
+
             if nli_label == "entailment":
                 return VerificationResult (
                     verdict = "Supported",
                     confidence = final_confidence,
-                    evidence_text = top_passage.text,
+                    evidence_text = evidence_summary,
                     evidence_source = top_passage.source,
                     reason = "Retrieved evidence entails the claim.",
                 )
@@ -102,7 +106,7 @@ def verify_claim (claim_text, top_passage = None):
                 return VerificationResult (
                     verdict = "Refuted",
                     confidence = final_confidence,
-                    evidence_text = top_passage.text,
+                    evidence_text = evidence_summary,
                     evidence_source = top_passage.source,
                     reason = "Retrieved evidence contradicts the claim.",
                 )
@@ -110,7 +114,7 @@ def verify_claim (claim_text, top_passage = None):
                 return VerificationResult (
                     verdict = "Not Enough Evidence",
                     confidence = final_confidence,
-                    evidence_text = top_passage.text,
+                    evidence_text = evidence_summary,
                     evidence_source = top_passage.source,
                     reason = "Retrieved evidence neither proves nor disproves the claim.",
                 )
