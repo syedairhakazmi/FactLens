@@ -114,6 +114,8 @@ def analyze_pipeline (payload: AnalyzeRequest):
     raw_text = payload.text.strip ()
     if len (raw_text) == 0:
         raise HTTPException (status_code = 400, detail = "Input text must not be empty.")
+    if len (raw_text) > 50000:
+        raise HTTPException (status_code = 413, detail = "Input text exceeds maximum allowed length.")
 
     # 1. coreference resolution
     coreference_result = resolve (raw_text)

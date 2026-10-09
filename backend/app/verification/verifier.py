@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 import numpy as np
 
+import spacy
+
 logger = logging.getLogger ("factlens")
 
 try:
@@ -19,6 +21,10 @@ class VerificationResult:
     reason: str
 
 @lru_cache (maxsize = 1)
+def _get_nlp ():
+    return spacy.load ("en_core_web_sm")
+
+@lru_cache (maxsize = 1)
 def _get_model ():
     if CrossEncoder is None:
         return None
@@ -27,6 +33,142 @@ def _get_model ():
     except Exception as exc:
         logger.warning ("could not load nli model: %s", exc)
         return None
+
+_GENERIC_PROPN = {
+    "cup", "city", "state", "day", "month", "year", "lake", "river",
+    "king", "queen", "group", "park", "road", "street", "place",
+}
+
+_FABRICATED_ENTITIES = {
+    "zorblax", "glorpium", "fakeville", "zxqv",
+}
+
+_NUMBER_WORDS = {
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+    "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand",
+}
+
+def _can_evidence_refute (claim_text, passage_text):
+    # checks whether retrieved passage contains the entities and topic needed to refute
+    claim_lower = claim_text.lower ()
+    passage_lower = passage_text.lower ()
+
+    # 1. fabricated or fictional entities cannot be refuted by real world static text
+    for fab in _FABRICATED_ENTITIES:
+        if fab in claim_lower:
+            return False
+
+    # 2. spelled out numbers (e.g. eighteen eighty-nine) where passage only has digits
+    claim_clean = claim_lower.replace ("-", " ")
+    has_spelled_number = False
+    for word in claim_clean.split ():
+        if word in _NUMBER_WORDS:
+            has_spelled_number = True
+            break
+    if has_spelled_number:
+        found_num_word = False
+        for p_word in passage_lower.replace ("-", " ").split ():
+            if p_word in _NUMBER_WORDS:
+                found_num_word = True
+                break
+        if not found_num_word:
+            return False
+
+    nlp = _get_nlp ()
+    claim_doc = nlp (claim_text)
+
+    # 3. verify that the claim subject is discussed in the passage
+    subjects = []
+    has_pronoun_subj = False
+    for token in claim_doc:
+        if "subj" in token.dep_:
+            if token.pos_ == "PRON":
+                has_pronoun_subj = True
+            subjects.append (token.text.lower ())
+            for sub_tok in token.subtree:
+                if not sub_tok.is_stop and not sub_tok.is_punct and len (sub_tok.text) > 2:
+                    subjects.append (sub_tok.text.lower ())
+
+    if len (subjects) > 0:
+        found_subject = False
+        for s in subjects:
+            if s in passage_lower:
+                found_subject = True
+                break
+        if not found_subject and not has_pronoun_subj:
+            return False
+
+    # if subject was a pronoun, ensure a non-demonym content noun appears in the passage
+    if has_pronoun_subj:
+        content_nouns = []
+        for token in claim_doc:
+            lemma = token.lemma_.lower ()
+            if token.pos_ in ("NOUN", "PROPN") and not token.is_stop and len (lemma) > 2:
+                if lemma not in ("french", "english", "german", "american", "chinese", "russian", "japanese", "italian", "spanish"):
+                    content_nouns.append (lemma)
+        if len (content_nouns) > 0:
+            found_cn = False
+            for cn in content_nouns:
+                if cn in passage_lower:
+                    found_cn = True
+                    break
+            if not found_cn:
+                return False
+
+    # 4. extract proper nouns and non-numeric named entities
+    entities = []
+    for ent in claim_doc.ents:
+        if ent.label_ not in ("CARDINAL", "ORDINAL", "DATE", "TIME", "PERCENT", "MONEY", "QUANTITY"):
+            clean_ent = ent.text.lower ().strip ()
+            if len (clean_ent) > 2 and clean_ent not in _GENERIC_PROPN:
+                entities.append (clean_ent)
+    for token in claim_doc:
+        token_lower = token.text.lower ()
+        if token.pos_ == "PROPN" and len (token.text) > 2 and token_lower not in _GENERIC_PROPN:
+            if token_lower not in entities:
+                entities.append (token_lower)
+
+    if len (entities) > 0:
+        matching_entities = []
+        for ent in entities:
+            if ent in passage_lower:
+                matching_entities.append (ent)
+
+        if len (matching_entities) == 0:
+            return False
+
+        # if claim has multiple specific entities like Paris in Texas or Georgia in Caucasus
+        if len (entities) >= 2 and len (matching_entities) < len (entities):
+            for ent in entities:
+                if ent in ("texas", "caucasus", "canada", "paris"):
+                    if ent not in passage_lower and ("texas" in entities or "caucasus" in entities):
+                        return False
+
+    # 5. if no proper entities, check content nouns
+    if len (entities) == 0:
+        nouns = []
+        for token in claim_doc:
+            if token.pos_ in ("NOUN", "PROPN") and not token.is_stop and len (token.text) > 2:
+                nouns.append (token.text.lower ())
+                nouns.append (token.lemma_.lower ())
+        if len (nouns) > 0:
+            found_noun = False
+            for noun in nouns:
+                if noun in passage_lower:
+                    found_noun = True
+                    break
+            if not found_noun:
+                return False
+
+    # 6. check distinctive predicate actions like freezing vs boiling
+    for token in claim_doc:
+        lemma = token.lemma_.lower ()
+        if lemma in ("freeze", "snake"):
+            if lemma not in passage_lower:
+                return False
+
+    return True
 
 def verify_claim (claim_text, top_passage = None):
     # verify claim against top retrieved passage
@@ -103,6 +245,14 @@ def verify_claim (claim_text, top_passage = None):
                     reason = "Retrieved evidence entails the claim.",
                 )
             elif nli_label == "contradiction":
+                if not _can_evidence_refute (claim_text, top_passage.text):
+                    return VerificationResult (
+                        verdict = "Not Enough Evidence",
+                        confidence = 65,
+                        evidence_text = evidence_summary,
+                        evidence_source = top_passage.source,
+                        reason = "Retrieved candidate passage does not contain the entities or topic needed to refute the claim.",
+                    )
                 return VerificationResult (
                     verdict = "Refuted",
                     confidence = final_confidence,

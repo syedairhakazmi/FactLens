@@ -128,8 +128,40 @@ def _get_model ():
     except Exception:
         return None
 
+_PRONOUN_TOKENS = {
+    "he", "him", "his", "himself",
+    "she", "her", "hers", "herself",
+    "it", "its", "itself",
+    "they", "them", "their", "theirs", "themselves",
+    "we", "us", "our", "ours", "ourselves",
+    "i", "me", "my", "mine", "myself",
+    "you", "your", "yours", "yourself", "yourselves",
+}
+
+def _has_candidate_pronouns (text):
+    # check if text contains any personal pronoun candidates
+    words = []
+    current = []
+    for ch in text.lower ():
+        if ch.isalnum ():
+            current.append (ch)
+        else:
+            if len (current) > 0:
+                words.append ("".join (current))
+                current = []
+    if len (current) > 0:
+        words.append ("".join (current))
+
+    for word in words:
+        if word in _PRONOUN_TOKENS:
+            return True
+    return False
+
 def resolve (text):
     # run coreference resolution on input text
+    if not _has_candidate_pronouns (text):
+        return CoreferenceResult (original_text = text, resolved_text = text, clusters = [])
+
     model = _get_model ()
     if model is None:
         return CoreferenceResult (original_text = text, resolved_text = text, clusters = [])

@@ -74,6 +74,34 @@ def extract_sentences (text):
     return sentences
 
 def _rule_precheck (sentence):
+    # filter out questions
+    trimmed = sentence.strip ()
+    if trimmed.endswith ("?"):
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Questions are inquiries rather than verifiable factual claims",
+        )
+
+    # filter out imperative commands and invitations
+    lowered = trimmed.lower ()
+    imperatives = ["visit ", "please ", "check ", "go to ", "look at ", "tell me "]
+    for imp in imperatives:
+        if lowered.startswith (imp):
+            return ClassifiedSentence (
+                text = sentence,
+                is_checkable = False,
+                reason = "Imperatives and requests are not factual claims",
+            )
+
+    # filter out exclamatory opinion phrases
+    if lowered.startswith ("what a ") or lowered.startswith ("what an "):
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Exclamatory phrase expresses subjective opinion",
+        )
+
     # filter out incomplete fragments with fewer than 3 words (e.g. 'It is.', 'Yes.')
     clean_words = sentence.translate (str.maketrans ("", "", string.punctuation)).split ()
     if len (clean_words) < 3:
@@ -84,7 +112,6 @@ def _rule_precheck (sentence):
         )
 
     # quick check for first person opinion phrases
-    lowered = sentence.lower ().strip ()
     for opener in _SUBJECTIVE_OPENERS:
         if lowered.startswith (opener):
             return ClassifiedSentence (
@@ -92,6 +119,21 @@ def _rule_precheck (sentence):
                 is_checkable = False,
                 reason = f"Opens with first-person subjective framing ('{opener}')",
             )
+
+    # verify that sentence contains at least one verb or copula
+    doc = _get_nlp () (sentence)
+    has_predicate = False
+    for token in doc:
+        if token.pos_ in ("VERB", "AUX"):
+            has_predicate = True
+            break
+    if not has_predicate:
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Sentence lacks a verb or predicate to form a checkable assertion",
+        )
+
     return None
 
 def _rule_fallback (sentence):
@@ -193,10 +235,22 @@ def classify_many (sentences):
                         cleaned_item = cleaned_item + "."
                 prepared_sentences.append (cleaned_item)
 
-            batch_scores = model (prepared_sentences)
+            unique_prepared = []
+            for item in prepared_sentences:
+                if item not in unique_prepared:
+                    unique_prepared.append (item)
+
+            unique_scores = model (unique_prepared)
+            score_cache = {}
+            u_index = 0
+            for item in unique_prepared:
+                score_cache [item] = unique_scores [u_index]
+                u_index = u_index + 1
+
             pos = 0
-            for scores in batch_scores:
+            for prep in prepared_sentences:
                 target_idx = pending_indices [pos]
+                scores = score_cache [prep]
                 results [target_idx] = _from_model_scores (sentences [target_idx], scores)
                 pos = pos + 1
 
