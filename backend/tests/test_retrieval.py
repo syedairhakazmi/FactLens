@@ -79,7 +79,8 @@ def test_corpus_index_with_dataset_records (tmp_path):
 def test_global_dataset_retrieve ():
     results = retrieve ("The COVID-19 vaccine and pregnancy", top_k = 1)
     assert len (results) >= 1
-    assert results [0].source in ["SciFact", "FEVER", "Local corpus"]
+    allowed_sources = ["SciFact", "FEVER 2018", "FEVER 2.0", "FEVEROUS", "AVeriTeC 2024", "AVeriTeC 2.0", "Local corpus"]
+    assert results [0].source in allowed_sources
 
 def test_load_scifact_corpus (tmp_path):
     # create a fake scifact corpus file with abstract as list

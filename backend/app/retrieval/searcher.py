@@ -234,15 +234,22 @@ class CorpusIndex:
         return top_passages
 
 _DEFAULT_DATASET_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus.jsonl")
+_FULL_DATASET_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_full.jsonl")
 _DEFAULT_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_embeddings.npy")
+_FULL_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_full_embeddings.npy")
 _GLOBAL_INDEX = None
 
 def get_global_index ():
-    # get or initialize global index from the dataset file
+    # use the full local corpus if available, otherwise use the smaller git version
     global _GLOBAL_INDEX
     if _GLOBAL_INDEX is None:
-        dataset_path = os.path.abspath (_DEFAULT_DATASET_FILE)
-        cache_path = os.path.abspath (_DEFAULT_CACHE_FILE)
+        full_path = os.path.abspath (_FULL_DATASET_FILE)
+        if os.path.exists (full_path):
+            dataset_path = full_path
+            cache_path = os.path.abspath (_FULL_CACHE_FILE)
+        else:
+            dataset_path = os.path.abspath (_DEFAULT_DATASET_FILE)
+            cache_path = os.path.abspath (_DEFAULT_CACHE_FILE)
         loaded_passages = load_dataset_from_file (dataset_path)
         _GLOBAL_INDEX = CorpusIndex (loaded_passages, cache_file_path = cache_path)
     return _GLOBAL_INDEX
