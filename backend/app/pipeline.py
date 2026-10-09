@@ -2,11 +2,24 @@ import logging
 from dataclasses import dataclass, field
 
 from app.coreference.resolver import resolve, CoreferenceResult
-from app.claims.detector import extract_claims, ClassifiedSentence
+from app.claims.detector import extract_claims, ClassifiedSentence, _get_nlp
 from app.retrieval.searcher import retrieve, RetrievedPassage
 from app.verification.verifier import verify_claim, VerificationResult
 
 logger = logging.getLogger ("factlens")
+
+def _is_independent_clause (text):
+    # checks if a text snippet contains both a subject and a verb predicate
+    nlp = _get_nlp ()
+    doc = nlp (text)
+    has_subject = False
+    has_predicate = False
+    for token in doc:
+        if "subj" in token.dep_:
+            has_subject = True
+        if token.pos_ in ("VERB", "AUX"):
+            has_predicate = True
+    return has_subject and has_predicate
 
 def _decompose (sentence):
     # split compound sentences containing coordinating conjunctions into atomic sub-claims
@@ -24,8 +37,27 @@ def _decompose (sentence):
                 next_pieces.append (piece)
         pieces = next_pieces
 
-    results = []
+    clause_pieces = []
     for piece in pieces:
+        if ", " in piece:
+            comma_parts = piece.split (", ")
+            all_clauses = True
+            for cp in comma_parts:
+                if not _is_independent_clause (cp):
+                    all_clauses = False
+                    break
+            if all_clauses:
+                for cp in comma_parts:
+                    cleaned_cp = cp.strip ()
+                    if len (cleaned_cp) > 0:
+                        clause_pieces.append (cleaned_cp)
+            else:
+                clause_pieces.append (piece)
+        else:
+            clause_pieces.append (piece)
+
+    results = []
+    for piece in clause_pieces:
         text = piece.strip ()
         if len (text) > 0:
             if not text.endswith (".") and not text.endswith ("?") and not text.endswith ("!"):
@@ -103,6 +135,18 @@ DEFAULT_EVIDENCE_CORPUS = [
     (
         "Python is a high-level, general-purpose programming language developed by "
         "Guido van Rossum and first released in 1991.",
+        "Local corpus",
+    ),
+    (
+        "Tokyo is the capital and most populous prefecture of Japan.",
+        "Local corpus",
+    ),
+    (
+        "Python is a genus of constricting snakes in the Pythonidae family native to the tropics and subtropics of the Eastern Hemisphere.",
+        "Local corpus",
+    ),
+    (
+        "Cairo is the capital and largest city of Egypt.",
         "Local corpus",
     ),
 ]

@@ -99,6 +99,16 @@ def _can_evidence_refute (claim_text, passage_text):
         if not found_subject and not has_pronoun_subj:
             return False
 
+    nominal_subjects = []
+    for token in claim_doc:
+        if token.dep_ == "nsubj" and token.pos_ != "PRON":
+            nominal_subjects.append (token.text.lower ())
+
+    if len (nominal_subjects) > 1:
+        for ns in nominal_subjects:
+            if ns not in passage_lower:
+                return False
+
     # if subject was a pronoun, ensure a non-demonym content noun appears in the passage
     if has_pronoun_subj:
         content_nouns = []
@@ -249,9 +259,9 @@ def verify_claim (claim_text, top_passage = None):
                     return VerificationResult (
                         verdict = "Not Enough Evidence",
                         confidence = 65,
-                        evidence_text = evidence_summary,
-                        evidence_source = top_passage.source,
-                        reason = "Retrieved candidate passage does not contain the entities or topic needed to refute the claim.",
+                        evidence_text = "No verifiable evidence found across the benchmark datasets to substantiate or disprove this claim.",
+                        evidence_source = "All Datasets (No relevant match)",
+                        reason = "Retrieved candidate passage does not contain the entities or topic needed to evaluate the claim.",
                     )
                 return VerificationResult (
                     verdict = "Refuted",

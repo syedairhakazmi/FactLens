@@ -783,7 +783,7 @@ function SubClaimCard({ claim, index }) {
           ) : (
             <>
               <p className="text-xs font-semibold pt-3 mb-2" style={{ color: C.supported, fontFamily: BODY }}>Factual claim - sent for verification.</p>
-              {claim.resolvedText && (
+              {claim.resolvedText && claim.resolvedText.trim () !== claim.text.trim () && (
                 <div className="mb-3 flex flex-col gap-1">
                   <span className="text-xs" style={{ color: C.inkFaint, fontFamily: MONO }}>as written: <span style={{ color: C.inkSoft }}>{claim.text}</span></span>
                   <span className="text-xs" style={{ color: C.info, fontFamily: MONO }}>resolved: <span style={{ fontWeight: 600 }}>{claim.resolvedText}</span></span>

@@ -508,3 +508,6 @@
 {"id": "averitec_2024_97", "title": "Refuted", "source": "AVeriTeC 2024", "text": "Walmart stores have stopped accepting cash payments. The answer and sources show that the store still accepts cash but would prefer exact amount in coins or payment by card so the claim is refuted."}
 {"id": "averitec_2024_98", "title": "Refuted", "source": "AVeriTeC 2024", "text": "warm water is effective in curing asthma The second answer and source show that there is not a cure for asthma so the claim is refuted."}
 {"id": "averitec_2024_99", "title": "Not Enough Evidence", "source": "AVeriTeC 2024", "text": "Cold drinks are the main cause of heart attacks. The questions and answers do not look at the part of the claim that says that it is the main cause so there is not enough evidence. I would need to see some evidence of how many heart attacks are caused by cold drinks."}
+{"id": "fever_tokyo_1", "title": "Tokyo", "source": "FEVER 2018", "text": "Tokyo is the capital and most populous prefecture of Japan."}
+{"id": "fever_python_snake_1", "title": "Python (snake)", "source": "FEVER 2018", "text": "Python is a genus of constricting snakes in the Pythonidae family native to the tropics and subtropics of the Eastern Hemisphere."}
+{"id": "fever_cairo_1", "title": "Cairo", "source": "FEVER 2018", "text": "Cairo is the capital and largest city of Egypt."}

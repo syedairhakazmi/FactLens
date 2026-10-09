@@ -64,6 +64,18 @@ DEFAULT_EVIDENCE_CORPUS = [
         "Python is a high-level, general-purpose programming language developed by Guido van Rossum and first released in 1991.",
         "Local corpus",
     ),
+    (
+        "Tokyo is the capital and most populous prefecture of Japan.",
+        "Local corpus",
+    ),
+    (
+        "Python is a genus of constricting snakes in the Pythonidae family native to the tropics and subtropics of the Eastern Hemisphere.",
+        "Local corpus",
+    ),
+    (
+        "Cairo is the capital and largest city of Egypt.",
+        "Local corpus",
+    ),
 ]
 
 class AnalyzeRequest (BaseModel):
@@ -136,15 +148,26 @@ def analyze_pipeline (payload: AnalyzeRequest):
                         )
 
     # 2. extract claims
+    raw_sentences = extract_claims (raw_text)
     classified_sentences = extract_claims (resolved_full_text)
 
     # 3. retrieve evidence and verify claims
     sub_claims = []
+    sentence_index = 0
     for classified_item in classified_sentences:
+        raw_sentence_text = classified_item.text
+        if sentence_index < len (raw_sentences):
+            raw_sentence_text = raw_sentences [sentence_index].text
+        sentence_index = sentence_index + 1
+
+        is_coref_modified = False
+        if raw_sentence_text.strip () != classified_item.text.strip ():
+            is_coref_modified = True
+
         if not classified_item.is_checkable:
             sub_claims.append (
                 SubClaimResult (
-                    text = classified_item.text,
+                    text = raw_sentence_text,
                     status = "Opinion",
                     reason = classified_item.reason,
                 )
@@ -159,8 +182,10 @@ def analyze_pipeline (payload: AnalyzeRequest):
 
                 verification_result = verify_claim (atomic_claim, top_passage)
 
+                claim_display_text = atomic_claim
                 resolved_value = None
-                if atomic_claim != raw_text:
+                if is_coref_modified:
+                    claim_display_text = raw_sentence_text
                     resolved_value = atomic_claim
 
                 bm25_value = None
@@ -171,7 +196,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
 
                 sub_claims.append (
                     SubClaimResult (
-                        text = atomic_claim,
+                        text = claim_display_text,
                         resolved_text = resolved_value,
                         status = "Fact",
                         verdict = verification_result.verdict,
@@ -199,6 +224,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
         overall_confidence = None
     else:
         all_opinion = False
+        all_supported = True
         has_refuted = False
         has_supported = False
         confidence_scores = []
@@ -206,14 +232,17 @@ def analyze_pipeline (payload: AnalyzeRequest):
         for fact_claim in factual_claims:
             if fact_claim.verdict == "Refuted":
                 has_refuted = True
+                all_supported = False
             elif fact_claim.verdict == "Supported":
                 has_supported = True
+            else:
+                all_supported = False
             if fact_claim.confidence is not None:
                 confidence_scores.append (fact_claim.confidence)
 
         if has_refuted:
             overall_verdict = "Refuted"
-        elif has_supported:
+        elif all_supported and has_supported:
             overall_verdict = "Supported"
         else:
             overall_verdict = "Not Enough Evidence"
