@@ -797,9 +797,9 @@ function SubClaimCard({ claim, index }) {
                 <span className="text-xs font-medium w-9 text-right" style={{ color: C.inkSoft, fontFamily: MONO }}>{claim.confidence}%</span>
               </div>
               <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>{claim.evidence}</p>
-              <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono" style={{ color: claim.source?.includes("Wikipedia") ? C.info : claim.source?.includes("SciFact") ? "#047857" : claim.source?.includes("FEVER") ? "#B45309" : claim.source?.includes("AVeriTeC") ? "#6D28D9" : C.inkSoft, backgroundColor: claim.source?.includes("Wikipedia") ? C.infoSoft : claim.source?.includes("SciFact") ? "#D1FAE5" : claim.source?.includes("FEVER") ? "#FEF3C7" : claim.source?.includes("AVeriTeC") ? "#EDE9FE" : C.paperSoft, border: `1px solid ${C.line}` }}>
+              <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono" style={{ color: claim.source?.includes("Wikipedia") ? C.info : claim.source?.includes("SciFact") ? "#047857" : claim.source?.includes("FEVER") ? "#B45309" : claim.source?.includes("AVeriTeC") ? "#6D28D9" : claim.source?.includes("All Datasets") ? "#475569" : C.inkSoft, backgroundColor: claim.source?.includes("Wikipedia") ? C.infoSoft : claim.source?.includes("SciFact") ? "#D1FAE5" : claim.source?.includes("FEVER") ? "#FEF3C7" : claim.source?.includes("AVeriTeC") ? "#EDE9FE" : claim.source?.includes("All Datasets") ? "#F1F5F9" : C.paperSoft, border: `1px solid ${C.line}` }}>
                 <Database className="w-3.5 h-3.5" />
-                <span>{claim.source || "Local Evidence Corpus"}</span>
+                <span>{claim.source || "Unified Benchmark Corpus"}</span>
               </div>
               {claim.searchTrail && <SearchTrail steps={claim.searchTrail} />}
             </>

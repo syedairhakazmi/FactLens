@@ -47,9 +47,9 @@ def verify_claim (claim_text, top_passage = None):
         return VerificationResult (
             verdict = "Not Enough Evidence",
             confidence = 40,
-            evidence_text = "No sufficiently relevant evidence found in the corpus for this claim.",
-            evidence_source = f"{top_passage.source} (Insufficient overlap)",
-            reason = "Retrieved candidate scored below the minimum relevance threshold.",
+            evidence_text = "No relevant facts or records found across the benchmark datasets for this claim.",
+            evidence_source = "All Datasets (No match found)",
+            reason = "Retrieved candidate scored below the minimum relevance threshold across all indexed corpora.",
         )
 
     # gate low combined score or low semantic embedding similarity (< 0.52)
@@ -63,9 +63,9 @@ def verify_claim (claim_text, top_passage = None):
         return VerificationResult (
             verdict = "Not Enough Evidence",
             confidence = calibrated_confidence,
-            evidence_text = "No verifiable evidence found in the benchmark corpus to substantiate or disprove this claim.",
-            evidence_source = f"{top_passage.source} (No relevant match)",
-            reason = "The corpus contains no relevant facts or records regarding this claim, so it cannot be confirmed or debunked.",
+            evidence_text = "No verifiable evidence found across the benchmark datasets to substantiate or disprove this claim.",
+            evidence_source = "All Datasets (No relevant match)",
+            reason = "Searched across SciFact, FEVER, AVeriTeC, and FEVEROUS, but no dataset contains relevant records for this claim.",
         )
 
     # run nli cross encoder model
