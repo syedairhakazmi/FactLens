@@ -7,6 +7,8 @@ __pycache__/
 # Datasets, these are large and downloaded via the datasets library,
 # not meant to be committed to the repo
 *.jsonl
+!backend/data/corpus.jsonl
+*.npy
 *.arrow
 datasets_cache/
 ~/.cache/huggingface/
