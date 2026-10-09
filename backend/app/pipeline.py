@@ -9,7 +9,33 @@ from app.verification.verifier import verify_claim, VerificationResult
 logger = logging.getLogger ("factlens")
 
 def _decompose (sentence):
-    return [sentence]
+    # split compound sentences containing coordinating conjunctions into atomic sub-claims
+    conjunctions = [", and ", ", but ", "; "]
+    pieces = [sentence]
+    for conj in conjunctions:
+        next_pieces = []
+        for piece in pieces:
+            if conj in piece:
+                for part in piece.split (conj):
+                    cleaned_part = part.strip ()
+                    if len (cleaned_part) > 0:
+                        next_pieces.append (cleaned_part)
+            else:
+                next_pieces.append (piece)
+        pieces = next_pieces
+
+    results = []
+    for piece in pieces:
+        text = piece.strip ()
+        if len (text) > 0:
+            if not text.endswith (".") and not text.endswith ("?") and not text.endswith ("!"):
+                text = text + "."
+            text = text [0].upper () + text [1:]
+            results.append (text)
+
+    if len (results) == 0:
+        return [sentence]
+    return results
 
 @dataclass
 class ClaimResult:

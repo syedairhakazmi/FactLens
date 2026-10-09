@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.claims.detector import extract_claims
 from app.coreference.resolver import resolve
+from app.pipeline import _decompose
 from app.retrieval.searcher import retrieve
 from app.verification.verifier import verify_claim
 
@@ -147,37 +148,39 @@ def analyze_pipeline (payload: AnalyzeRequest):
                 )
             )
         else:
-            found_passages = retrieve (classified_item.text, top_k = 1)
-            top_passage = None
-            if len (found_passages) > 0:
-                top_passage = found_passages [0]
+            atomic_claims = _decompose (classified_item.text)
+            for atomic_claim in atomic_claims:
+                found_passages = retrieve (atomic_claim, top_k = 1)
+                top_passage = None
+                if len (found_passages) > 0:
+                    top_passage = found_passages [0]
 
-            verification_result = verify_claim (classified_item.text, top_passage)
+                verification_result = verify_claim (atomic_claim, top_passage)
 
-            resolved_value = None
-            if classified_item.text != raw_text:
-                resolved_value = classified_item.text
+                resolved_value = None
+                if atomic_claim != raw_text:
+                    resolved_value = atomic_claim
 
-            bm25_value = None
-            embedding_value = None
-            if top_passage is not None:
-                bm25_value = round (top_passage.bm25_score, 4)
-                embedding_value = round (top_passage.embedding_score, 4)
+                bm25_value = None
+                embedding_value = None
+                if top_passage is not None:
+                    bm25_value = round (top_passage.bm25_score, 4)
+                    embedding_value = round (top_passage.embedding_score, 4)
 
-            sub_claims.append (
-                SubClaimResult (
-                    text = classified_item.text,
-                    resolved_text = resolved_value,
-                    status = "Fact",
-                    verdict = verification_result.verdict,
-                    confidence = verification_result.confidence,
-                    evidence = verification_result.evidence_text,
-                    source = verification_result.evidence_source,
-                    reason = verification_result.reason,
-                    bm25_score = bm25_value,
-                    embedding_score = embedding_value,
+                sub_claims.append (
+                    SubClaimResult (
+                        text = atomic_claim,
+                        resolved_text = resolved_value,
+                        status = "Fact",
+                        verdict = verification_result.verdict,
+                        confidence = verification_result.confidence,
+                        evidence = verification_result.evidence_text,
+                        source = verification_result.evidence_source,
+                        reason = verification_result.reason,
+                        bm25_score = bm25_value,
+                        embedding_score = embedding_value,
+                    )
                 )
-            )
 
     # 4. aggregate verdict
     factual_claims = []

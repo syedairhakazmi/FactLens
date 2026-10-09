@@ -43,9 +43,29 @@ def _get_model ():
         return None
 
 def extract_sentences (text):
+    # normalize repeated punctuation like !!! or ??? to prevent fragmented splitting
+    normalized = text
+    while "!!" in normalized:
+        normalized = normalized.replace ("!!", "!")
+    while "??" in normalized:
+        normalized = normalized.replace ("??", "?")
+    while ".." in normalized:
+        normalized = normalized.replace ("..", ".")
+
+    # if all uppercase shouting text with internal punctuation, normalize internal marks
+    tokens = normalized.split ()
+    if len (tokens) >= 3 and normalized.isupper ():
+        cleaned_tokens = []
+        for i, t in enumerate (tokens):
+            if i < len (tokens) - 1:
+                cleaned_tokens.append (t.replace ("!", "").replace ("?", "").replace (".", ""))
+            else:
+                cleaned_tokens.append (t)
+        normalized = " ".join (cleaned_tokens)
+
     # split text into sentences using spacy
     nlp = _get_nlp ()
-    doc = nlp (text)
+    doc = nlp (normalized)
     sentences = []
     for sent in doc.sents:
         cleaned = sent.text.strip ()
@@ -54,6 +74,15 @@ def extract_sentences (text):
     return sentences
 
 def _rule_precheck (sentence):
+    # filter out incomplete fragments with fewer than 3 words (e.g. 'It is.', 'Yes.')
+    clean_words = sentence.translate (str.maketrans ("", "", string.punctuation)).split ()
+    if len (clean_words) < 3:
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Sentence fragment is too brief to form a complete checkable assertion",
+        )
+
     # quick check for first person opinion phrases
     lowered = sentence.lower ().strip ()
     for opener in _SUBJECTIVE_OPENERS:
@@ -155,7 +184,16 @@ def classify_many (sentences):
             for idx in pending_indices:
                 results [idx] = _rule_fallback (sentences [idx])
         else:
-            batch_scores = model (pending_sentences)
+            prepared_sentences = []
+            for s in pending_sentences:
+                cleaned_item = s.strip ()
+                if len (cleaned_item) > 0:
+                    cleaned_item = cleaned_item [0].upper () + cleaned_item [1:]
+                    if not cleaned_item.endswith (".") and not cleaned_item.endswith ("?") and not cleaned_item.endswith ("!"):
+                        cleaned_item = cleaned_item + "."
+                prepared_sentences.append (cleaned_item)
+
+            batch_scores = model (prepared_sentences)
             pos = 0
             for scores in batch_scores:
                 target_idx = pending_indices [pos]
