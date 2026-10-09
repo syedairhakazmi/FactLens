@@ -82,10 +82,7 @@ DEFAULT_EVIDENCE_CORPUS = [
 ]
 
 def run_pipeline (text, corpus = None, top_k = 1):
-    # execute pipeline stages in order
-    if corpus is None:
-        corpus = DEFAULT_EVIDENCE_CORPUS
-
+    # execute pipeline stages in order (uses real datasets when corpus is None)
     result = PipelineResult (input_text = text, coreference = None)
 
     # 1. coreference resolution
