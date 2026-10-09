@@ -154,11 +154,11 @@ function GlobalStyle() {
 // ---------------------------------------------------------------------------
 
 const EXAMPLES = [
-  { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "Local corpus evidence match", text: "The Eiffel Tower was completed in 1889." },
+  { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "FEVER benchmark evidence match", text: "The Eiffel Tower was completed in 1889." },
   { id: "coref", kind: "factcheck", label: "Pronoun resolution", sub: "fastcoref resolves pronouns across sentences", text: "The COVID-19 vaccine received official authorization. It was evaluated in randomized clinical trials." },
   { id: "opinion", kind: "factcheck", label: "Subjective opinion", sub: "spaCy fact vs opinion filtering", text: "I think this is the most wonderful restaurant in the city." },
-  { id: "science", kind: "factcheck", label: "Scientific fact", sub: "Local corpus physical science match", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
-  { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "Local corpus evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
+  { id: "science", kind: "factcheck", label: "Scientific fact", sub: "SciFact physical science match", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
+  { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "SciFact clinical evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
 ];
 
 const MOCK_RESPONSES = {
@@ -167,8 +167,8 @@ const MOCK_RESPONSES = {
       overallVerdict: "Supported", overallConfidence: 86, allOpinion: false, usedRetry: false, usedWikipediaFallback: false,
       corefResolutions: [{ from: "It", to: "The new vaccine" }],
       subClaims: [
-        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 89, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "Local corpus" },
-        { text: "It is being distributed nationwide.", resolvedText: "The new vaccine is being distributed nationwide.", status: "Fact", verdict: "Supported", confidence: 82, evidence: "Distribution announcements confirm a nationwide rollout following approval.", source: "Local corpus" },
+        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 89, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "SciFact" },
+        { text: "It is being distributed nationwide.", resolvedText: "The new vaccine is being distributed nationwide.", status: "Fact", verdict: "Supported", confidence: 82, evidence: "Distribution announcements confirm a nationwide rollout following approval.", source: "SciFact" },
       ],
     },
     hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "No targeted or dehumanizing language detected." },
@@ -177,8 +177,8 @@ const MOCK_RESPONSES = {
     factCheck: {
       overallVerdict: "Refuted", overallConfidence: 91, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [
-        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 88, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "Local corpus" },
-        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - adaptive decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "Local corpus" },
+        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 88, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "SciFact" },
+        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - adaptive decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "SciFact" },
       ],
     },
     hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "No targeted or dehumanizing language detected." },
@@ -187,8 +187,8 @@ const MOCK_RESPONSES = {
     factCheck: {
       overallVerdict: "Supported", overallConfidence: 79, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [
-        { text: "Refugees from that country arrived last year.", status: "Fact", verdict: "Supported", confidence: 79, evidence: "Immigration records confirm an increase in arrivals from that origin during the stated period.", source: "Local corpus" },
-        { text: "They're all criminals who should be sent back.", status: "Fact", note: "Framed as a factual claim about a group, but it's an unsupported generalization rather than a checkable statistic.", verdict: "Refuted", confidence: 88, evidence: "No data supports criminality as characteristic of the group; crime-rate studies show no such pattern.", source: "Local corpus" },
+        { text: "Refugees from that country arrived last year.", status: "Fact", verdict: "Supported", confidence: 79, evidence: "Immigration records confirm an increase in arrivals from that origin during the stated period.", source: "FEVER 2018" },
+        { text: "They're all criminals who should be sent back.", status: "Fact", note: "Framed as a factual claim about a group, but it's an unsupported generalization rather than a checkable statistic.", verdict: "Refuted", confidence: 88, evidence: "No data supports criminality as characteristic of the group; crime-rate studies show no such pattern.", source: "FEVER 2018" },
       ],
     },
     hateSpeech: { classification: "Hate", target: "Refugees from that country / national-origin group", cues: ["that country", "all criminals", "sent back"], reason: "Generalizes an entire group as criminal and calls for their removal - a dehumanizing generalization plus an exclusionary call to action." },
@@ -202,7 +202,7 @@ const MOCK_RESPONSES = {
       overallVerdict: "Supported", overallConfidence: 85, allOpinion: false, usedRetry: false, usedWikipediaFallback: false,
       corefResolutions: [{ from: "It", to: "The new iPhone" }],
       subClaims: [
-        { text: "The new iPhone was released last month.", status: "Fact", verdict: "Supported", confidence: 85, evidence: "Product release announcements confirm the launch date.", source: "Local corpus" },
+        { text: "The new iPhone was released last month.", status: "Fact", verdict: "Supported", confidence: 85, evidence: "Product release announcements confirm the launch date.", source: "AVeriTeC 2024" },
         { text: "It's the most beautiful phone ever made.", status: "Opinion" },
       ],
     },
@@ -287,8 +287,8 @@ function mockAnalyze(text) {
       status: "Fact",
       verdict: verdicts[(hash + i) % 3],
       confidence: 55 + ((hash + i * 13) % 40),
-      evidence: "Retrieved passage overlaps with the claim's key terms and entities from the local corpus.",
-      source: "Local corpus",
+      evidence: "Retrieved passage overlaps with the claim's key terms and entities from benchmark corpus.",
+      source: ["SciFact", "FEVER 2018", "AVeriTeC 2024", "FEVEROUS"][(hash + i) % 4],
       searchTrail: [
         { label: `BM25 keyword score: ${simBm25}`, state: "done" },
         { label: `Semantic embedding score: ${simEmb}`, state: "done" },
