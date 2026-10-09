@@ -63,9 +63,9 @@ def verify_claim (claim_text, top_passage = None):
         return VerificationResult (
             verdict = "Not Enough Evidence",
             confidence = calibrated_confidence,
-            evidence_text = f"Weak candidate evidence found: \"{top_passage.text}\"",
-            evidence_source = f"{top_passage.source} (Low relevance)",
-            reason = "Retrieved candidate passage lacks sufficient semantic overlap to verify or refute this claim.",
+            evidence_text = f"No verified evidence found in the corpus. (Closest candidate lacked connection: \"{top_passage.text}\")",
+            evidence_source = f"{top_passage.source} (No relevant match)",
+            reason = "The corpus contains no relevant facts or records regarding this claim, so it cannot be confirmed or debunked.",
         )
 
     # run nli cross encoder model

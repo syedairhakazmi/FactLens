@@ -659,11 +659,11 @@ function InputScreen({ text, setText, onAnalyze, shakeKey }) {
 // ---------------------------------------------------------------------------
 
 const STAGES = [
-  "Resolving pronoun references (fastcoref)",
+  "Resolving pronoun references (LingMessCoref)",
   "Identifying factual claims (spaCy)",
   "Extracting claims & statements",
   "Retrieving evidence passages",
-  "Ranking evidence with BM25",
+  "Dense semantic retrieval (BAAI/bge-base)",
   "Generating verification report",
 ];
 const COREF_STAGE_INDEX = 0;
@@ -823,9 +823,10 @@ function TechDetails({ data, isHate = false }) {
         ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" → "${c.to}"`).join("; ") : "No pronouns required resolution in this text"],
         ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} subjective opinions`],
         ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
-        ["Evidence retrieval", "BM25Plus keyword search + dense semantic embedding ranking"],
-        ["Verification engine", "Cross-references assertion against top-ranked corpus evidence"],
-        ["Evidence sources", "Local evidence corpus"],
+        ["Coreference model", "LingMessCoref (Longformer-based coreference resolution)"],
+        ["Evidence retrieval", "Hybrid search: BM25Plus lexical match + BAAI/bge-base-en-v1.5 dense retrieval"],
+        ["Verification engine", "DeBERTa-v3 NLI cross-encoder (cross-encoder/nli-deberta-v3-small)"],
+        ["Evidence sources", "Unified multi-benchmark corpus (SciFact, FEVER 2018, FEVER 2.0, FEVEROUS, AVeriTeC)"],
       ];
   return (
     <div className="flex flex-col gap-2.5">
