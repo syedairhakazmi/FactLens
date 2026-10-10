@@ -164,29 +164,32 @@ def run_pipeline (text, corpus = None, top_k = 1):
         result.overall_verdict = "Not Applicable"
         result.overall_confidence = None
     else:
-        all_supported = True
-        has_refuted = False
-        has_supported = False
+        supported_count = 0
+        refuted_count = 0
+        nee_count = 0
         confidence_scores = []
 
         for fact_claim in factual_claims:
             if fact_claim.verification is not None:
-                if fact_claim.verification.verdict == "Refuted":
-                    has_refuted = True
-                    all_supported = False
-                elif fact_claim.verification.verdict == "Supported":
-                    has_supported = True
+                verdict_val = fact_claim.verification.verdict
+                if verdict_val == "Supported":
+                    supported_count = supported_count + 1
+                elif verdict_val == "Refuted":
+                    refuted_count = refuted_count + 1
                 else:
-                    all_supported = False
+                    nee_count = nee_count + 1
                 if fact_claim.verification.confidence is not None:
                     confidence_scores.append (fact_claim.verification.confidence)
 
-        if has_refuted:
-            result.overall_verdict = "Refuted"
-        elif all_supported and has_supported:
+        total_claims = len (factual_claims)
+        if supported_count == total_claims and total_claims > 0:
             result.overall_verdict = "Supported"
-        else:
+        elif refuted_count == total_claims and total_claims > 0:
+            result.overall_verdict = "Refuted"
+        elif nee_count == total_claims and total_claims > 0:
             result.overall_verdict = "Not Enough Evidence"
+        else:
+            result.overall_verdict = "Mixed"
 
         if len (confidence_scores) > 0:
             result.overall_confidence = int (sum (confidence_scores) / len (confidence_scores))
