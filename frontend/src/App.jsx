@@ -178,7 +178,7 @@ const MOCK_RESPONSES = {
       overallVerdict: "Refuted", overallConfidence: 91, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [
         { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 88, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "SciFact" },
-        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - adaptive decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "SciFact" },
+        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - baseline decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "SciFact" },
       ],
     },
     hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "No targeted or dehumanizing language detected." },
@@ -934,8 +934,8 @@ function FactCheckReport({ data, originalText, onCopied }) {
         </Disclosure>
       )}
 
-      <Disclosure icon={FileText} title="Claim breakdown" subtitle={`Adaptive, model-driven decomposition - ${data.subClaims.length} sub-claim${data.subClaims.length > 1 ? "s" : ""}`} defaultOpen>
-        <p className="text-xs mb-3" style={{ color: C.inkFaint, fontFamily: BODY }}>FactLens decomposes complex sentences into atomic, independently verifiable claims - this is model-driven, not a fixed rule like splitting at "and".</p>
+      <Disclosure icon={FileText} title="Claim breakdown" subtitle={`Rule-based baseline decomposition - ${data.subClaims.length} sub-claim${data.subClaims.length > 1 ? "s" : ""}`} defaultOpen>
+        <p className="text-xs mb-3" style={{ color: C.inkFaint, fontFamily: BODY }}>FactLens decomposes complex sentences into atomic, independently verifiable claims using spaCy dependency parse rules (Iteration 1 baseline).</p>
         <div className="flex flex-col gap-3">
           {data.subClaims.map((c, i) => <SubClaimCard key={i} claim={c} index={i} />)}
         </div>

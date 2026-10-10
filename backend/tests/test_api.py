@@ -1,5 +1,11 @@
+import pytest
 from fastapi.testclient import TestClient
 from app.api.main import app
+from app.coreference import resolver
+
+@pytest.fixture(autouse=True)
+def mock_coref_model(monkeypatch):
+    monkeypatch.setattr(resolver, "_get_model", lambda: None)
 
 client = TestClient (app)
 

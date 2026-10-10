@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.claims.detector import extract_claims
 from app.coreference.resolver import resolve
-from app.pipeline import _decompose
+from app.decomposition import decompose
 from app.retrieval.searcher import retrieve
 from app.verification.verifier import verify_claim
 
@@ -173,7 +173,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
                 )
             )
         else:
-            atomic_claims = _decompose (classified_item.text)
+            atomic_claims = decompose (classified_item.text)
             for atomic_claim in atomic_claims:
                 found_passages = retrieve (atomic_claim, top_k = 1)
                 top_passage = None

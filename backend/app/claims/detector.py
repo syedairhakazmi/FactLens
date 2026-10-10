@@ -142,6 +142,11 @@ def _rule_precheck (sentence):
         if token.pos_ in ("VERB", "AUX"):
             has_predicate = True
             break
+    if not has_predicate and sentence.isupper ():
+        for token in _get_nlp () (sentence.lower ()):
+            if token.pos_ in ("VERB", "AUX"):
+                has_predicate = True
+                break
     if not has_predicate:
         return ClassifiedSentence (
             text = sentence,

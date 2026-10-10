@@ -2,72 +2,16 @@ import logging
 from dataclasses import dataclass, field
 
 from app.coreference.resolver import resolve, CoreferenceResult
-from app.claims.detector import extract_claims, ClassifiedSentence, _get_nlp
+from app.claims.detector import extract_claims, ClassifiedSentence
+from app.decomposition import decompose
 from app.retrieval.searcher import retrieve, RetrievedPassage
 from app.verification.verifier import verify_claim, VerificationResult
 
 logger = logging.getLogger ("factlens")
 
-def _is_independent_clause (text):
-    # checks if a text snippet contains both a subject and a verb predicate
-    nlp = _get_nlp ()
-    doc = nlp (text)
-    has_subject = False
-    has_predicate = False
-    for token in doc:
-        if "subj" in token.dep_:
-            has_subject = True
-        if token.pos_ in ("VERB", "AUX"):
-            has_predicate = True
-    return has_subject and has_predicate
+# Alias for backwards compatibility
+_decompose = decompose
 
-def _decompose (sentence):
-    # split compound sentences containing coordinating conjunctions into atomic sub-claims
-    conjunctions = [", and ", ", but ", "; "]
-    pieces = [sentence]
-    for conj in conjunctions:
-        next_pieces = []
-        for piece in pieces:
-            if conj in piece:
-                for part in piece.split (conj):
-                    cleaned_part = part.strip ()
-                    if len (cleaned_part) > 0:
-                        next_pieces.append (cleaned_part)
-            else:
-                next_pieces.append (piece)
-        pieces = next_pieces
-
-    clause_pieces = []
-    for piece in pieces:
-        if ", " in piece:
-            comma_parts = piece.split (", ")
-            all_clauses = True
-            for cp in comma_parts:
-                if not _is_independent_clause (cp):
-                    all_clauses = False
-                    break
-            if all_clauses:
-                for cp in comma_parts:
-                    cleaned_cp = cp.strip ()
-                    if len (cleaned_cp) > 0:
-                        clause_pieces.append (cleaned_cp)
-            else:
-                clause_pieces.append (piece)
-        else:
-            clause_pieces.append (piece)
-
-    results = []
-    for piece in clause_pieces:
-        text = piece.strip ()
-        if len (text) > 0:
-            if not text.endswith (".") and not text.endswith ("?") and not text.endswith ("!"):
-                text = text + "."
-            text = text [0].upper () + text [1:]
-            results.append (text)
-
-    if len (results) == 0:
-        return [sentence]
-    return results
 
 @dataclass
 class ClaimResult:
@@ -178,7 +122,7 @@ def run_pipeline (text, corpus = None, top_k = 1):
             continue
 
         # 3. claim decomposition
-        sub_claims = _decompose (classified_item.text)
+        sub_claims = decompose (classified_item.text)
 
         for sub_claim in sub_claims:
             if sub_claim in claim_cache:
