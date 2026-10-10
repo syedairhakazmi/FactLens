@@ -154,11 +154,11 @@ function GlobalStyle() {
 // ---------------------------------------------------------------------------
 
 const EXAMPLES = [
-  { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "Local corpus evidence match", text: "The Eiffel Tower was completed in 1889." },
+  { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "FEVER benchmark evidence match", text: "The Eiffel Tower was completed in 1889." },
   { id: "coref", kind: "factcheck", label: "Pronoun resolution", sub: "fastcoref resolves pronouns across sentences", text: "The COVID-19 vaccine received official authorization. It was evaluated in randomized clinical trials." },
   { id: "opinion", kind: "factcheck", label: "Subjective opinion", sub: "spaCy fact vs opinion filtering", text: "I think this is the most wonderful restaurant in the city." },
-  { id: "science", kind: "factcheck", label: "Scientific fact", sub: "Local corpus physical science match", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
-  { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "Local corpus evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
+  { id: "science", kind: "factcheck", label: "Scientific fact", sub: "SciFact physical science match", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
+  { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "SciFact clinical evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
 ];
 
 const MOCK_RESPONSES = {
@@ -167,8 +167,8 @@ const MOCK_RESPONSES = {
       overallVerdict: "Supported", overallConfidence: 86, allOpinion: false, usedRetry: false, usedWikipediaFallback: false,
       corefResolutions: [{ from: "It", to: "The new vaccine" }],
       subClaims: [
-        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 89, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "Local corpus" },
-        { text: "It is being distributed nationwide.", resolvedText: "The new vaccine is being distributed nationwide.", status: "Fact", verdict: "Supported", confidence: 82, evidence: "Distribution announcements confirm a nationwide rollout following approval.", source: "Local corpus" },
+        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 89, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "SciFact" },
+        { text: "It is being distributed nationwide.", resolvedText: "The new vaccine is being distributed nationwide.", status: "Fact", verdict: "Supported", confidence: 82, evidence: "Distribution announcements confirm a nationwide rollout following approval.", source: "SciFact" },
       ],
     },
     hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "No targeted or dehumanizing language detected." },
@@ -177,8 +177,8 @@ const MOCK_RESPONSES = {
     factCheck: {
       overallVerdict: "Refuted", overallConfidence: 91, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [
-        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 88, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "Local corpus" },
-        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - adaptive decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "Local corpus" },
+        { text: "The new vaccine was approved last week.", status: "Fact", verdict: "Supported", confidence: 88, evidence: "Regulatory filing confirms authorization was granted on the stated date.", source: "SciFact" },
+        { text: "The new vaccine causes infertility in most patients.", status: "Fact", note: "Causal and controversial, but still a checkable factual claim - baseline decomposition does not treat it as opinion.", verdict: "Refuted", confidence: 94, evidence: "Clinical trial data shows no statistically significant link to fertility outcomes.", source: "SciFact" },
       ],
     },
     hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "No targeted or dehumanizing language detected." },
@@ -187,8 +187,8 @@ const MOCK_RESPONSES = {
     factCheck: {
       overallVerdict: "Supported", overallConfidence: 79, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [],
       subClaims: [
-        { text: "Refugees from that country arrived last year.", status: "Fact", verdict: "Supported", confidence: 79, evidence: "Immigration records confirm an increase in arrivals from that origin during the stated period.", source: "Local corpus" },
-        { text: "They're all criminals who should be sent back.", status: "Fact", note: "Framed as a factual claim about a group, but it's an unsupported generalization rather than a checkable statistic.", verdict: "Refuted", confidence: 88, evidence: "No data supports criminality as characteristic of the group; crime-rate studies show no such pattern.", source: "Local corpus" },
+        { text: "Refugees from that country arrived last year.", status: "Fact", verdict: "Supported", confidence: 79, evidence: "Immigration records confirm an increase in arrivals from that origin during the stated period.", source: "FEVER 2018" },
+        { text: "They're all criminals who should be sent back.", status: "Fact", note: "Framed as a factual claim about a group, but it's an unsupported generalization rather than a checkable statistic.", verdict: "Refuted", confidence: 88, evidence: "No data supports criminality as characteristic of the group; crime-rate studies show no such pattern.", source: "FEVER 2018" },
       ],
     },
     hateSpeech: { classification: "Hate", target: "Refugees from that country / national-origin group", cues: ["that country", "all criminals", "sent back"], reason: "Generalizes an entire group as criminal and calls for their removal - a dehumanizing generalization plus an exclusionary call to action." },
@@ -202,7 +202,7 @@ const MOCK_RESPONSES = {
       overallVerdict: "Supported", overallConfidence: 85, allOpinion: false, usedRetry: false, usedWikipediaFallback: false,
       corefResolutions: [{ from: "It", to: "The new iPhone" }],
       subClaims: [
-        { text: "The new iPhone was released last month.", status: "Fact", verdict: "Supported", confidence: 85, evidence: "Product release announcements confirm the launch date.", source: "Local corpus" },
+        { text: "The new iPhone was released last month.", status: "Fact", verdict: "Supported", confidence: 85, evidence: "Product release announcements confirm the launch date.", source: "AVeriTeC 2024" },
         { text: "It's the most beautiful phone ever made.", status: "Opinion" },
       ],
     },
@@ -287,8 +287,8 @@ function mockAnalyze(text) {
       status: "Fact",
       verdict: verdicts[(hash + i) % 3],
       confidence: 55 + ((hash + i * 13) % 40),
-      evidence: "Retrieved passage overlaps with the claim's key terms and entities from the local corpus.",
-      source: "Local corpus",
+      evidence: "Retrieved passage overlaps with the claim's key terms and entities from benchmark corpus.",
+      source: ["SciFact", "FEVER 2018", "AVeriTeC 2024", "FEVEROUS"][(hash + i) % 4],
       searchTrail: [
         { label: `BM25 keyword score: ${simBm25}`, state: "done" },
         { label: `Semantic embedding score: ${simEmb}`, state: "done" },
@@ -659,11 +659,11 @@ function InputScreen({ text, setText, onAnalyze, shakeKey }) {
 // ---------------------------------------------------------------------------
 
 const STAGES = [
-  "Resolving pronoun references (fastcoref)",
+  "Resolving pronoun references (LingMessCoref)",
   "Identifying factual claims (spaCy)",
   "Extracting claims & statements",
   "Retrieving evidence passages",
-  "Ranking evidence with BM25",
+  "Dense semantic retrieval (BAAI/bge-base)",
   "Generating verification report",
 ];
 const COREF_STAGE_INDEX = 0;
@@ -783,7 +783,7 @@ function SubClaimCard({ claim, index }) {
           ) : (
             <>
               <p className="text-xs font-semibold pt-3 mb-2" style={{ color: C.supported, fontFamily: BODY }}>Factual claim - sent for verification.</p>
-              {claim.resolvedText && (
+              {claim.resolvedText && claim.resolvedText.trim () !== claim.text.trim () && (
                 <div className="mb-3 flex flex-col gap-1">
                   <span className="text-xs" style={{ color: C.inkFaint, fontFamily: MONO }}>as written: <span style={{ color: C.inkSoft }}>{claim.text}</span></span>
                   <span className="text-xs" style={{ color: C.info, fontFamily: MONO }}>resolved: <span style={{ fontWeight: 600 }}>{claim.resolvedText}</span></span>
@@ -797,9 +797,9 @@ function SubClaimCard({ claim, index }) {
                 <span className="text-xs font-medium w-9 text-right" style={{ color: C.inkSoft, fontFamily: MONO }}>{claim.confidence}%</span>
               </div>
               <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>{claim.evidence}</p>
-              <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono" style={{ color: claim.source?.includes("Wikipedia") ? C.info : claim.source?.includes("SciFact") ? "#047857" : claim.source?.includes("FEVER") ? "#B45309" : claim.source?.includes("AVeriTeC") ? "#6D28D9" : C.inkSoft, backgroundColor: claim.source?.includes("Wikipedia") ? C.infoSoft : claim.source?.includes("SciFact") ? "#D1FAE5" : claim.source?.includes("FEVER") ? "#FEF3C7" : claim.source?.includes("AVeriTeC") ? "#EDE9FE" : C.paperSoft, border: `1px solid ${C.line}` }}>
+              <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono" style={{ color: claim.source?.includes("Wikipedia") ? C.info : claim.source?.includes("SciFact") ? "#047857" : claim.source?.includes("FEVER") ? "#B45309" : claim.source?.includes("AVeriTeC") ? "#6D28D9" : claim.source?.includes("All Datasets") ? "#475569" : C.inkSoft, backgroundColor: claim.source?.includes("Wikipedia") ? C.infoSoft : claim.source?.includes("SciFact") ? "#D1FAE5" : claim.source?.includes("FEVER") ? "#FEF3C7" : claim.source?.includes("AVeriTeC") ? "#EDE9FE" : claim.source?.includes("All Datasets") ? "#F1F5F9" : C.paperSoft, border: `1px solid ${C.line}` }}>
                 <Database className="w-3.5 h-3.5" />
-                <span>{claim.source || "Local Evidence Corpus"}</span>
+                <span>{claim.source || "Unified Benchmark Corpus"}</span>
               </div>
               {claim.searchTrail && <SearchTrail steps={claim.searchTrail} />}
             </>
@@ -823,9 +823,10 @@ function TechDetails({ data, isHate = false }) {
         ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" → "${c.to}"`).join("; ") : "No pronouns required resolution in this text"],
         ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} subjective opinions`],
         ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
-        ["Evidence retrieval", "BM25Plus keyword search + dense semantic embedding ranking"],
-        ["Verification engine", "Cross-references assertion against top-ranked corpus evidence"],
-        ["Evidence sources", "Local evidence corpus"],
+        ["Coreference model", "LingMessCoref (Longformer-based coreference resolution)"],
+        ["Evidence retrieval", "Hybrid search: BM25Plus lexical match + BAAI/bge-base-en-v1.5 dense retrieval"],
+        ["Verification engine", "DeBERTa-v3 NLI cross-encoder (cross-encoder/nli-deberta-v3-small)"],
+        ["Evidence sources", "Unified multi-benchmark corpus (SciFact, FEVER 2018, FEVER 2.0, FEVEROUS, AVeriTeC)"],
       ];
   return (
     <div className="flex flex-col gap-2.5">
@@ -933,8 +934,8 @@ function FactCheckReport({ data, originalText, onCopied }) {
         </Disclosure>
       )}
 
-      <Disclosure icon={FileText} title="Claim breakdown" subtitle={`Adaptive, model-driven decomposition - ${data.subClaims.length} sub-claim${data.subClaims.length > 1 ? "s" : ""}`} defaultOpen>
-        <p className="text-xs mb-3" style={{ color: C.inkFaint, fontFamily: BODY }}>FactLens decomposes complex sentences into atomic, independently verifiable claims - this is model-driven, not a fixed rule like splitting at "and".</p>
+      <Disclosure icon={FileText} title="Claim breakdown" subtitle={`Rule-based baseline decomposition - ${data.subClaims.length} sub-claim${data.subClaims.length > 1 ? "s" : ""}`} defaultOpen>
+        <p className="text-xs mb-3" style={{ color: C.inkFaint, fontFamily: BODY }}>FactLens decomposes complex sentences into atomic, independently verifiable claims using spaCy dependency parse rules (Iteration 1 baseline).</p>
         <div className="flex flex-col gap-3">
           {data.subClaims.map((c, i) => <SubClaimCard key={i} claim={c} index={i} />)}
         </div>
