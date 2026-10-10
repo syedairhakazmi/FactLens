@@ -85,9 +85,24 @@ def _rule_precheck (sentence):
 
     # filter out imperative commands and invitations
     lowered = trimmed.lower ()
-    imperatives = ["visit ", "please ", "check ", "go to ", "look at ", "tell me "]
+    imperatives = ["visit ", "please ", "check ", "go to ", "look at ", "tell me ", "remember ", "download ", "eat ", "buy "]
     for imp in imperatives:
         if lowered.startswith (imp):
+            return ClassifiedSentence (
+                text = sentence,
+                is_checkable = False,
+                reason = "Imperatives and requests are not factual claims",
+            )
+
+    doc_pre = _get_nlp () (sentence)
+    if len (doc_pre) > 0:
+        first_token = doc_pre [0]
+        has_subject = False
+        for token in doc_pre:
+            if "subj" in token.dep_:
+                has_subject = True
+                break
+        if not has_subject and (first_token.pos_ == "VERB" or first_token.tag_ in ("VB", "VBP")):
             return ClassifiedSentence (
                 text = sentence,
                 is_checkable = False,
