@@ -28,6 +28,7 @@ class ClassifiedSentence:
     is_checkable: bool
     reason: str
     subjectivity_score: float | None = None
+    category: str = "Fact"
 
 @lru_cache (maxsize = 1)
 def _get_nlp ():
@@ -81,6 +82,7 @@ def _rule_precheck (sentence):
             text = sentence,
             is_checkable = False,
             reason = "Questions are inquiries rather than verifiable factual claims",
+            category = "Non-Checkable",
         )
 
     # filter out imperative commands and invitations
@@ -92,6 +94,7 @@ def _rule_precheck (sentence):
                 text = sentence,
                 is_checkable = False,
                 reason = "Imperatives and requests are not factual claims",
+                category = "Non-Checkable",
             )
 
     doc_pre = _get_nlp () (sentence)
@@ -107,6 +110,7 @@ def _rule_precheck (sentence):
                 text = sentence,
                 is_checkable = False,
                 reason = "Imperatives and requests are not factual claims",
+                category = "Non-Checkable",
             )
 
     # filter out exclamatory opinion phrases
@@ -115,15 +119,17 @@ def _rule_precheck (sentence):
             text = sentence,
             is_checkable = False,
             reason = "Exclamatory phrase expresses subjective opinion",
+            category = "Opinion",
         )
 
-    # filter out incomplete fragments with fewer than 3 words (e.g. 'It is.', 'Yes.')
+    # filter out incomplete fragments with fewer than 3 words (e.g. 'It is.', 'Yes.', 'i')
     clean_words = sentence.translate (str.maketrans ("", "", string.punctuation)).split ()
     if len (clean_words) < 3:
         return ClassifiedSentence (
             text = sentence,
             is_checkable = False,
             reason = "Sentence fragment is too brief to form a complete checkable assertion",
+            category = "Non-Checkable",
         )
 
     # quick check for first person opinion phrases
@@ -133,6 +139,7 @@ def _rule_precheck (sentence):
                 text = sentence,
                 is_checkable = False,
                 reason = f"Opens with first-person subjective framing ('{opener}')",
+                category = "Opinion",
             )
 
     # verify that sentence contains at least one verb or copula
@@ -152,6 +159,7 @@ def _rule_precheck (sentence):
             text = sentence,
             is_checkable = False,
             reason = "Sentence lacks a verb or predicate to form a checkable assertion",
+            category = "Non-Checkable",
         )
 
     return None
@@ -193,11 +201,13 @@ def _rule_fallback (sentence):
             text = sentence,
             is_checkable = False,
             reason = f"Matches opinion pattern: '{matched_word}' (offline rule fallback)",
+            category = "Opinion",
         )
     return ClassifiedSentence (
         text = sentence,
         is_checkable = True,
         reason = "No opinion markers detected, treated as a checkable claim (offline rule fallback)",
+        category = "Fact",
     )
 
 def _from_model_scores (sentence, scores):
@@ -214,6 +224,7 @@ def _from_model_scores (sentence, scores):
             is_checkable = False,
             reason = f"Subjectivity model classified this as an opinion ({subjectivity_score:.0%} subjective)",
             subjectivity_score = subjectivity_score,
+            category = "Opinion",
         )
     else:
         return ClassifiedSentence (
@@ -221,6 +232,7 @@ def _from_model_scores (sentence, scores):
             is_checkable = True,
             reason = f"Subjectivity model classified this as objective ({1 - subjectivity_score:.0%} objective)",
             subjectivity_score = subjectivity_score,
+            category = "Fact",
         )
 
 def classify_many (sentences):
