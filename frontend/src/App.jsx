@@ -300,9 +300,21 @@ function mockAnalyze(text) {
   });
 
   const allOpinion = subClaims.length > 0 && subClaims.every((c) => c.status === "Opinion");
+  const facts = subClaims.filter((c) => c.status === "Fact");
+  let overallVerdict = "Not Applicable";
+  if (!allOpinion && facts.length > 0) {
+    const supportedCount = facts.filter((c) => c.verdict === "Supported").length;
+    const refutedCount = facts.filter((c) => c.verdict === "Refuted").length;
+    const neeCount = facts.filter((c) => c.verdict === "Not Enough Evidence").length;
+    if (supportedCount === facts.length) overallVerdict = "Supported";
+    else if (refutedCount === facts.length) overallVerdict = "Refuted";
+    else if (neeCount === facts.length) overallVerdict = "Not Enough Evidence";
+    else overallVerdict = "Mixed";
+  }
+
   const factCheck = allOpinion
     ? { overallVerdict: "Not Applicable", overallConfidence: null, allOpinion: true, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [], subClaims }
-    : { overallVerdict: verdicts[hash % 3], overallConfidence: 55 + (hash % 40), allOpinion: false, usedRetry, usedWikipediaFallback: false, corefResolutions, subClaims };
+    : { overallVerdict, overallConfidence: 55 + (hash % 40), allOpinion: false, usedRetry, usedWikipediaFallback: false, corefResolutions, subClaims };
 
   const hateWords = ["hate","despise","disgusting","filthy","worthless","pathetic","subhuman","animals","vermin","parasites","savages","monsters","scum","ban","should be removed","should be thrown out","get rid of them","drive them out","they don't belong here","should not be allowed","kill","murder","destroy them","wipe them out","eliminate them","attack them","hurt them","inferior","lesser","worth less","second class","not equal","criminals","thugs","terrorists","corrupt","dangerous","dirty","degenerate","all of them are","those people are","people like them","they are all","we don't want them"];
   const offensiveWords = ["stupid","idiot","moron","fool","dumb","ignorant","clueless","useless","worthless","pathetic","evil","disgusting","hideous","repulsive","awful","horrible","terrible","nasty","gross","ridiculous","brainless","brain-dead","dumbass","imbecile","idiotic","stupidest","incompetent","incapable","jerk","loser","liar","cheater","coward","scumbag","creep","weirdo","disgrace","shut up","get lost","go away","nobody likes you","you're a joke","what an idiot","you're useless","you're pathetic"];
@@ -387,8 +399,8 @@ function Disclosure({ icon: Icon, title, subtitle, defaultOpen = false, children
   );
 }
 
-const VERDICT_ICON = { Supported: CheckCircle2, Refuted: XCircle, "Not Enough Evidence": HelpCircle, "Not Applicable": HelpCircle };
-const VERDICT_TEXT_COLOR = { Supported: C.supported, Refuted: C.refuted, "Not Enough Evidence": "#8A6A00", "Not Applicable": C.inkFaint };
+const VERDICT_ICON = { Supported: CheckCircle2, Refuted: XCircle, "Not Enough Evidence": HelpCircle, "Not Applicable": HelpCircle, Mixed: AlertTriangle };
+const VERDICT_TEXT_COLOR = { Supported: C.supported, Refuted: C.refuted, "Not Enough Evidence": "#8A6A00", "Not Applicable": C.inkFaint, Mixed: "#B45309" };
 
 function Stamp({ label, icon: Icon, color, rotate = -5 }) {
   const flecks = [{ dx: "-26px", dy: "-14px" }, { dx: "24px", dy: "-18px" }, { dx: "-18px", dy: "20px" }, { dx: "28px", dy: "16px" }, { dx: "0px", dy: "-26px" }];
@@ -412,7 +424,7 @@ function VerdictStamp({ verdict, rotate }) {
 
 function VerdictPill({ verdict }) {
   const color = VERDICT_TEXT_COLOR[verdict] || C.inkFaint;
-  const bg = verdict === "Supported" ? C.supportedSoft : verdict === "Refuted" ? C.refutedSoft : verdict === "Not Enough Evidence" ? C.highlightSoft : C.paperSoft;
+  const bg = verdict === "Supported" ? C.supportedSoft : verdict === "Refuted" ? C.refutedSoft : verdict === "Not Enough Evidence" ? C.highlightSoft : verdict === "Mixed" ? "#FEF3C7" : C.paperSoft;
   const Icon = VERDICT_ICON[verdict] || HelpCircle;
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color, backgroundColor: bg, fontFamily: BODY }}>
@@ -909,8 +921,31 @@ function FactCheckReport({ data, originalText, onCopied }) {
             )}
           </div>
         )}
+        {data.subClaims.length > 1 && !data.allOpinion && (
+          <div className="mt-3 pt-3 flex items-center gap-2 flex-wrap text-xs" style={{ borderTop: `1.5px dashed ${C.line}`, color: C.inkSoft, fontFamily: BODY }}>
+            <span className="font-bold">Decomposition Summary:</span>
+            <span className="inline-flex items-center gap-1 font-semibold" style={{ color: C.supported }}>
+              <CheckCircle2 className="w-3 h-3" />
+              {data.subClaims.filter((c) => c.verdict === "Supported").length} Supported
+            </span>
+            <span>•</span>
+            <span className="inline-flex items-center gap-1 font-semibold" style={{ color: C.refuted }}>
+              <XCircle className="w-3 h-3" />
+              {data.subClaims.filter((c) => c.verdict === "Refuted").length} Refuted
+            </span>
+            {data.subClaims.some((c) => c.verdict === "Not Enough Evidence") && (
+              <>
+                <span>•</span>
+                <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#8A6A00" }}>
+                  <HelpCircle className="w-3 h-3" />
+                  {data.subClaims.filter((c) => c.verdict === "Not Enough Evidence").length} Inconclusive
+                </span>
+              </>
+            )}
+          </div>
+        )}
         {data.isLiveBackend && (
-          <div className="mt-4 pt-3 flex items-center gap-2" style={{ borderTop: `1.5px dashed ${C.line}` }}>
+          <div className="mt-3 pt-3 flex items-center gap-2" style={{ borderTop: `1.5px dashed ${C.line}` }}>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={{ color: "#065F46", backgroundColor: "#D1FAE5", border: "1.5px solid #10B981", fontFamily: MONO }}>
               <Sparkles className="w-3.5 h-3.5" />
               LIVE PYTHON ENGINE (spaCy + BM25)
