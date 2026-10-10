@@ -277,6 +277,10 @@ function mockAnalyze(text) {
     if (cleanTokens.length < 3) {
       return { text: s, status: "Non-Checkable", reason: "Sentence fragment is too brief to form a complete checkable assertion" };
     }
+    const funcWords = new Set(["i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "their", "our", "its", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "a", "an", "the", "and", "or", "but", "so", "if", "then", "that", "this", "these", "those"]);
+    if (cleanTokens.every((t) => funcWords.has(t))) {
+      return { text: s, status: "Non-Checkable", reason: "Sentence lacks content words (nouns, adjectives, or verbs) to form a meaningful assertion" };
+    }
     const isOpinion = opinionPattern.test(sLower) || opinionLeadIn.test(sLower);
     if (isOpinion) return { text: s, status: "Opinion", reason: "Exclamatory or subjective phrase expresses personal opinion" };
 
