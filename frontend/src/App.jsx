@@ -273,8 +273,12 @@ function mockAnalyze(text) {
 
   const subClaims = sentenceList.map((s, i) => {
     const sLower = s.trim().toLowerCase();
+    const cleanTokens = sLower.replace(/[^a-z0-9\s]/g, " ").trim().split(/\s+/).filter(Boolean);
+    if (cleanTokens.length < 3) {
+      return { text: s, status: "Non-Checkable", reason: "Sentence fragment is too brief to form a complete checkable assertion" };
+    }
     const isOpinion = opinionPattern.test(sLower) || opinionLeadIn.test(sLower);
-    if (isOpinion) return { text: s, status: "Opinion" };
+    if (isOpinion) return { text: s, status: "Opinion", reason: "Exclamatory or subjective phrase expresses personal opinion" };
 
     const resolvedText = corefResolutions.length && /^(it|they|this|these)\b/i.test(s.trim())
       ? s.replace(/^(It|They|This|These)\b/i, corefResolutions[0].to.replace(/\u2026$/, ""))
@@ -299,8 +303,8 @@ function mockAnalyze(text) {
     return claim;
   });
 
-  const allOpinion = subClaims.length > 0 && subClaims.every((c) => c.status === "Opinion");
   const facts = subClaims.filter((c) => c.status === "Fact");
+  const allOpinion = subClaims.length > 0 && facts.length === 0;
   let overallVerdict = "Not Applicable";
   if (!allOpinion && facts.length > 0) {
     const supportedCount = facts.filter((c) => c.verdict === "Supported").length;
@@ -439,6 +443,15 @@ function OpinionPill() {
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: C.opinion, backgroundColor: C.opinionSoft, fontFamily: BODY }}>
       <MessageSquare className="w-3.5 h-3.5" />
       Opinion
+    </span>
+  );
+}
+
+function NonCheckablePill() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "#854D0E", backgroundColor: "#FEF9C3", fontFamily: BODY }}>
+      <HelpCircle className="w-3.5 h-3.5" />
+      Non-Checkable
     </span>
   );
 }
@@ -773,6 +786,7 @@ function LoadingScreen({ stageIndex, usedRetry, usedWikipediaFallback, corefCoun
 function SubClaimCard({ claim, index }) {
   const [open, setOpen] = useState(index === 0);
   const isOpinion = claim.status === "Opinion";
+  const isNonCheckable = claim.status === "Non-Checkable";
   const color = VERDICT_TEXT_COLOR[claim.verdict] || C.inkFaint;
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: `2px solid ${C.line}`, backgroundColor: C.paperRaised }}>
@@ -782,7 +796,7 @@ function SubClaimCard({ claim, index }) {
           <span className="text-sm truncate" style={{ color: C.ink, fontFamily: BODY }}>{claim.text}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {isOpinion ? <OpinionPill /> : <VerdictPill verdict={claim.verdict} />}
+          {isOpinion ? <OpinionPill /> : isNonCheckable ? <NonCheckablePill /> : <VerdictPill verdict={claim.verdict} />}
           <ChevronDown className="w-4 h-4" style={{ color: C.inkFaint, transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s ease" }} />
         </div>
       </button>
@@ -790,8 +804,17 @@ function SubClaimCard({ claim, index }) {
         <div className="fl-expand px-4 pb-4 pt-1 ml-8" style={{ borderTop: `2px dashed ${C.line}` }}>
           {isOpinion ? (
             <p className="text-sm leading-relaxed pt-3" style={{ color: C.inkSoft, fontFamily: BODY }}>
-              Opinion - not a factual claim, so it will not be fact-checked. FactLens only sends checkable factual assertions through evidence retrieval and verification.
+              Opinion - subjective statement, so it will not be fact-checked. FactLens only sends checkable factual assertions through evidence retrieval and verification.
             </p>
+          ) : isNonCheckable ? (
+            <div className="pt-3 flex flex-col gap-1.5">
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "#854D0E", fontFamily: MONO }}>
+                Non-Checkable Input
+              </p>
+              <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>
+                {claim.reason || "Sentence fragment, question, or incomplete statement — does not form a checkable factual claim."}
+              </p>
+            </div>
           ) : (
             <>
               <p className="text-xs font-semibold pt-3 mb-2" style={{ color: C.supported, fontFamily: BODY }}>Factual claim - sent for verification.</p>
@@ -895,10 +918,14 @@ function FactCheckReport({ data, originalText, onCopied }) {
         <p className="mb-5 leading-relaxed" style={{ color: C.ink, fontFamily: BODY }}>{originalText}</p>
 
         {data.allOpinion ? (
-          <div className="flex items-start gap-3 p-4 rounded-xl" style={{ backgroundColor: C.opinionSoft }}>
-            <MessageSquare className="w-5 h-5 shrink-0 mt-0.5" style={{ color: C.opinion }} />
-            <p className="text-sm leading-relaxed font-medium" style={{ color: "#4C1D95", fontFamily: BODY }}>
-              Opinion - not a factual claim, so it will not be fact-checked.
+          <div className="flex items-start gap-3 p-4 rounded-xl" style={{ backgroundColor: data.subClaims.some((c) => c.status === "Non-Checkable") ? "#FEF9C3" : C.opinionSoft }}>
+            {data.subClaims.some((c) => c.status === "Non-Checkable") ? (
+              <HelpCircle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: "#854D0E" }} />
+            ) : (
+              <MessageSquare className="w-5 h-5 shrink-0 mt-0.5" style={{ color: C.opinion }} />
+            )}
+            <p className="text-sm leading-relaxed font-medium" style={{ color: data.subClaims.some((c) => c.status === "Non-Checkable") ? "#854D0E" : "#4C1D95", fontFamily: BODY }}>
+              {data.subClaims.find((c) => c.status === "Non-Checkable")?.reason || "Opinion - not a factual claim, so it will not be fact-checked."}
             </p>
           </div>
         ) : (

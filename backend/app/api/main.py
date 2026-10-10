@@ -165,10 +165,11 @@ def analyze_pipeline (payload: AnalyzeRequest):
             is_coref_modified = True
 
         if not classified_item.is_checkable:
+            category_label = getattr (classified_item, "category", "Non-Checkable")
             sub_claims.append (
                 SubClaimResult (
                     text = raw_sentence_text,
-                    status = "Opinion",
+                    status = category_label,
                     reason = classified_item.reason,
                 )
             )
