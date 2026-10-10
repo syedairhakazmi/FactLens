@@ -277,6 +277,10 @@ function mockAnalyze(text) {
     if (cleanTokens.length < 3) {
       return { text: s, status: "Non-Checkable", reason: "Sentence fragment is too brief to form a complete checkable assertion" };
     }
+    const funcWords = new Set(["i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "their", "our", "its", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "a", "an", "the", "and", "or", "but", "so", "if", "then", "that", "this", "these", "those"]);
+    if (cleanTokens.every((t) => funcWords.has(t))) {
+      return { text: s, status: "Non-Checkable", reason: "Sentence lacks content words (nouns, adjectives, or verbs) to form a meaningful assertion" };
+    }
     const isOpinion = opinionPattern.test(sLower) || opinionLeadIn.test(sLower);
     if (isOpinion) return { text: s, status: "Opinion", reason: "Exclamatory or subjective phrase expresses personal opinion" };
 
@@ -856,7 +860,7 @@ function TechDetails({ data, isHate = false }) {
       ]
     : [
         ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" → "${c.to}"`).join("; ") : "No pronouns required resolution in this text"],
-        ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} subjective opinions`],
+        ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} opinions${data.subClaims.some((c) => c.status === "Non-Checkable") ? `, ${data.subClaims.filter((c) => c.status === "Non-Checkable").length} non-checkable` : ""}`],
         ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
         ["Coreference model", "LingMessCoref (Longformer-based coreference resolution)"],
         ["Evidence retrieval", "Hybrid search: BM25Plus lexical match + BAAI/bge-base-en-v1.5 dense retrieval"],
@@ -903,7 +907,13 @@ function FactCheckReport({ data, originalText, onCopied }) {
     const lines = [`FactLens fact-check report`, `Text: "${originalText}"`, `Overall: ${data.overallVerdict}${data.overallConfidence != null ? ` (${data.overallConfidence}% confidence)` : ""}`, ""];
     data.subClaims.forEach((c, i) => {
       lines.push(`${i + 1}. ${c.text}`);
-      lines.push(c.status === "Opinion" ? "   Opinion - not fact-checked" : `   ${c.verdict} (${c.confidence}%) - ${c.evidence}`);
+      if (c.status === "Opinion") {
+        lines.push(`   Opinion - not fact-checked (${c.reason || "subjective statement"})`);
+      } else if (c.status === "Non-Checkable") {
+        lines.push(`   Non-Checkable - ${c.reason || "not a checkable factual claim"}`);
+      } else {
+        lines.push(`   ${c.verdict} (${c.confidence}%) - ${c.evidence}`);
+      }
     });
     return lines.join("\n");
   };
@@ -925,7 +935,9 @@ function FactCheckReport({ data, originalText, onCopied }) {
               <MessageSquare className="w-5 h-5 shrink-0 mt-0.5" style={{ color: C.opinion }} />
             )}
             <p className="text-sm leading-relaxed font-medium" style={{ color: data.subClaims.some((c) => c.status === "Non-Checkable") ? "#854D0E" : "#4C1D95", fontFamily: BODY }}>
-              {data.subClaims.find((c) => c.status === "Non-Checkable")?.reason || "Opinion - not a factual claim, so it will not be fact-checked."}
+              {data.subClaims.some((c) => c.status === "Non-Checkable")
+                ? (data.subClaims.find((c) => c.status === "Non-Checkable")?.reason || "Sentence fragment is too brief to form a complete checkable assertion")
+                : (data.subClaims.find((c) => c.status === "Opinion")?.reason || "Opinion - not a factual claim, so it will not be fact-checked.")}
             </p>
           </div>
         ) : (
@@ -1177,6 +1189,7 @@ export default function App() {
             text: c.text,
             resolvedText: c.resolved_text || undefined,
             status: c.status,
+            reason: c.reason,
             verdict: c.verdict || "Not Enough Evidence",
             confidence: c.confidence || 50,
             evidence: c.evidence || "No evidence found in local corpus.",
