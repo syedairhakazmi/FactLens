@@ -1,52 +1,11 @@
-"""
-Claim decomposition (baseline, rule-based).
-
-Splits a sentence containing more than one fact into independent,
-self-contained sub-claims, using spaCy's dependency parse (the same
-en_core_web_sm model detector.py already loads).
-
-Patterns handled:
-  1. Coordinated verbs / clauses ("and", "but", "while", "whereas", "yet")
-       "The vaccine was approved last week, and it causes infertility."
-       "Obama was born in Hawaii and served as president."
-     -> one claim per verb; a missing subject is inherited from the
-        first clause.
-  2. Non-restrictive appositives (comma-bracketed)
-       "Paris, the capital of France, hosts the Eiffel Tower."
-     -> "Paris is the capital of France." + "Paris hosts the Eiffel Tower."
-  3. Non-restrictive subject relative clauses (comma-bracketed)
-       "The Eiffel Tower, which was built in 1889, is in Paris."
-     -> "The Eiffel Tower was built in 1889." + "The Eiffel Tower is in Paris."
-
-Deliberately NOT split (too error-prone for a baseline):
-  - "or" (a disjunction is not two independent facts)
-  - coordinated nouns ("physics and chemistry")
-  - restrictive relative clauses ("the man who stole the car")
-  - reported speech ("He said that A and B")
-
-Safety net: any sentence that doesn't match a pattern, or whose split
-would produce a fragment, is returned unchanged, so this stage can
-never lose a claim.
-
-Public API:  decompose(sentence: str) -> list[str]
-"""
-
-from __future__ import annotations
-
 import logging
 from functools import lru_cache
-
 import spacy
-from spacy.tokens import Span, Token
 
-import re
-
-logger = logging.getLogger("factlens")
+logger = logging.getLogger ("factlens")
 
 _SPLIT_CONJ = {"and", "but", "while", "whereas", "yet"}
 _SUBJ_DEPS = {"nsubj", "nsubjpass", "csubj", "csubjpass"}
-# A clause needs at least one of these to be a meaningful claim on its own
-# (guards against "He bought and sold stocks" -> "He bought.")
 _COMPLEMENT_DEPS = {
     "dobj", "obj", "attr", "acomp", "prep", "agent", "dative",
     "oprd", "xcomp", "ccomp", "advmod", "npadvmod", "advcl", "prt",
@@ -54,231 +13,298 @@ _COMPLEMENT_DEPS = {
 }
 _MIN_WORDS = 3
 
+@lru_cache (maxsize = 1)
+def _get_nlp ():
+    # load spacy small english model
+    return spacy.load ("en_core_web_sm")
 
-@lru_cache(maxsize=1)
-def _get_nlp():
-    return spacy.load("en_core_web_sm")
-
-
-# ---------------------------------------------------------------------------
-# text helpers
-# ---------------------------------------------------------------------------
-
-def _text(tokens: list[Token], sort: bool = True) -> str:
-    """Rebuild a string from tokens, keeping original spacing where tokens
-    were adjacent and inserting a space where tokens were removed between."""
+def _text (tokens, sort = True):
+    # build clean text from tokens preserving original whitespace
     if sort:
-        tokens = sorted(tokens, key=lambda t: t.i)
+        tokens = sorted (tokens, key = lambda t: t.i)
     out = []
-    for n, t in enumerate(tokens):
-        out.append(t.text)
-        if n + 1 < len(tokens):
-            out.append(t.whitespace_ if tokens[n + 1].i == t.i + 1 else " ")
-    return " ".join("".join(out).split())
+    token_count = len (tokens)
+    for idx in range (token_count):
+        t = tokens [idx]
+        out.append (t.text)
+        if idx + 1 < token_count:
+            next_t = tokens [idx + 1]
+            if next_t.i == t.i + 1:
+                out.append (t.whitespace_)
+            else:
+                out.append (" ")
+    joined = "".join (out)
+    words = joined.split ()
+    return " ".join (words)
 
+def _clean (text):
+    # clean leading and trailing punctuation and spaces
+    text = text.strip ()
+    punctuation_chars = ",;:-.!? "
+    while len (text) > 0 and text [-1] in punctuation_chars:
+        text = text [:-1].strip ()
 
-def _clean(text: str) -> str:
-    """Trim stray punctuation/conjunctions, capitalise, end with a period."""
-    text = text.strip(" ,;:-")
-    while True:
-        prev = text
-        text = re.sub(r"[,;:-]+\s*\.?$", "", text).strip()
-        text = text.strip(" ,;:-.!?")
-        if text == prev:
-            break
-    first, _, rest = text.partition(" ")
-    if rest and first.lower() in _SPLIT_CONJ | {"or"}:
-        text = rest
-    text = text.strip(" ,;:-.!?")
-    if not text:
+    # remove leading conjunction if left behind
+    words = text.split ()
+    if len (words) > 1:
+        first_word = words [0].lower ()
+        if first_word in _SPLIT_CONJ or first_word == "or":
+            text = " ".join (words [1:])
+
+    while len (text) > 0 and text [-1] in punctuation_chars:
+        text = text [:-1].strip ()
+
+    if len (text) == 0:
         return ""
-    text = text[0].upper() + text[1:]
-    if text[-1] not in ".!?":
-        text += "."
+
+    # capitalize first letter and ensure ending period
+    text = text [0].upper () + text [1:]
+    if not text.endswith (".") and not text.endswith ("?") and not text.endswith ("!"):
+        text = text + "."
     return text
 
+def _is_nonrestrictive (t):
+    # check if subtree is set off by a comma or bracket on the left
+    left = 999999
+    for x in t.subtree:
+        if x.i < left:
+            left = x.i
+    if left > 0:
+        prev_token = t.doc [left - 1]
+        if prev_token.text == "," or prev_token.text == "(":
+            return True
+    return False
 
-def _idx(tokens) -> set[int]:
-    return {t.i for t in tokens}
-
-
-# ---------------------------------------------------------------------------
-# embedded material: appositives + relative clauses
-# ---------------------------------------------------------------------------
-
-def _is_nonrestrictive(t: Token) -> bool:
-    """True if the subtree of t is set off by a comma / bracket on the left."""
-    left = min(x.i for x in t.subtree)
-    return left > 0 and t.doc[left - 1].text in {",", "("}
-
-
-def _embedded_spans(sent: Span) -> list[Token]:
-    """Appositive / relative-clause heads we will pull out of the sentence."""
+def _embedded_spans (sent):
+    # find appositive and relative clause tokens to pull out
     found = []
     for t in sent:
-        if t.dep_ == "appos" and t.pos_ in {"NOUN", "PROPN"} and _is_nonrestrictive(t):
-            found.append(t)
-        elif t.dep_ == "relcl" and _is_nonrestrictive(t):
-            found.append(t)
+        if t.dep_ == "appos" and (t.pos_ == "NOUN" or t.pos_ == "PROPN") and _is_nonrestrictive (t):
+            found.append (t)
+        elif t.dep_ == "relcl" and _is_nonrestrictive (t):
+            found.append (t)
     return found
 
-
-def _embedded_drop(embedded: list[Token]) -> set[int]:
-    """Token indices to remove from the main claim (phrase + bracketing commas)."""
-    drop: set[int] = set()
+def _embedded_drop (embedded):
+    # token indices to remove from the main claim
+    drop = set ()
     for t in embedded:
-        sub = sorted(x.i for x in t.subtree)
-        drop |= set(sub)
+        sub = []
+        for x in t.subtree:
+            sub.append (x.i)
+        sub = sorted (sub)
+        for idx in sub:
+            drop.add (idx)
         doc = t.doc
-        if doc[sub[0] - 1].text in {",", "("}:
-            drop.add(sub[0] - 1)
-        if sub[-1] + 1 < len(doc) and doc[sub[-1] + 1].text in {",", ")"}:
-            drop.add(sub[-1] + 1)
+        first_idx = sub [0]
+        last_idx = sub [-1]
+        if first_idx > 0:
+            prev_char = doc [first_idx - 1].text
+            if prev_char == "," or prev_char == "(":
+                drop.add (first_idx - 1)
+        if last_idx + 1 < len (doc):
+            next_char = doc [last_idx + 1].text
+            if next_char == "," or next_char == ")":
+                drop.add (last_idx + 1)
     return drop
 
+def _head_phrase (head, drop):
+    # extract head phrase tokens excluding dropped embedded tokens
+    toks = []
+    for t in head.subtree:
+        if t.i not in drop:
+            toks.append (t)
+    return _text (toks)
 
-def _head_phrase(head: Token, drop: set[int]) -> str:
-    return _text([t for t in head.subtree if t.i not in drop])
-
-
-def _embedded_claims(embedded: list[Token], drop: set[int]) -> list[str]:
+def _embedded_claims (embedded, drop):
+    # extract standalone claims from appositives and relative clauses
     claims = []
     for t in embedded:
         head = t.head
-        head_text = _head_phrase(head, drop)
-        if not head_text:
+        head_text = _head_phrase (head, drop)
+        if len (head_text) == 0:
             continue
         if t.dep_ == "appos":
-            be = "are" if head.tag_ in {"NNS", "NNPS"} else "is"
-            claims.append(_clean(f"{head_text} {be} {_text(list(t.subtree))}"))
-        else:  # relcl: only subject relatives (who / which / that)
-            relpron = next(
-                (c for c in t.children
-                 if c.tag_ in {"WDT", "WP"} and c.dep_ in {"nsubj", "nsubjpass"}),
-                None,
-            )
+            if head.tag_ == "NNS" or head.tag_ == "NNPS":
+                be = "are"
+            else:
+                be = "is"
+            subtree_toks = []
+            for x in t.subtree:
+                subtree_toks.append (x)
+            sub_text = _text (subtree_toks)
+            claim_str = head_text + " " + be + " " + sub_text
+            claims.append (_clean (claim_str))
+        else:
+            relpron = None
+            for c in t.children:
+                if (c.tag_ == "WDT" or c.tag_ == "WP") and (c.dep_ == "nsubj" or c.dep_ == "nsubjpass"):
+                    relpron = c
+                    break
             if relpron is None:
                 continue
-            rest = [x for x in t.subtree if x.i != relpron.i]
-            claims.append(_clean(f"{head_text} {_text(rest)}"))
+            rest = []
+            for x in t.subtree:
+                if x.i != relpron.i:
+                    rest.append (x)
+            claim_str = head_text + " " + _text (rest)
+            claims.append (_clean (claim_str))
     return claims
 
-
-# ---------------------------------------------------------------------------
-# coordinated clauses
-# ---------------------------------------------------------------------------
-
-def _conj_children(v: Token) -> list[Token]:
-    """Verbs coordinated with v via a splittable conjunction."""
+def _conj_children (v):
+    # verbs coordinated with v via a splittable conjunction
     out = []
     for c in v.children:
-        if c.dep_ == "conj" and c.pos_ in {"VERB", "AUX"}:
-            ccs = [x.lower_ for x in c.head.children if x.dep_ == "cc"]
-            if any(w in _SPLIT_CONJ for w in ccs):
-                out.append(c)
+        if c.dep_ == "conj" and (c.pos_ == "VERB" or c.pos_ == "AUX"):
+            has_split_cc = False
+            for x in c.head.children:
+                if x.dep_ == "cc" and x.lower_ in _SPLIT_CONJ:
+                    has_split_cc = True
+                    break
+            if has_split_cc:
+                out.append (c)
     return out
 
-
-def _find_subject(v: Token) -> tuple[Token | None, bool]:
-    """Own subject if present, otherwise inherited from a parent clause."""
-    own = next((c for c in v.children if c.dep_ in _SUBJ_DEPS), None)
-    if own is not None:
-        return own, False
+def _find_subject (v):
+    # find own subject or inherit from ancestor clause
+    for c in v.children:
+        if c.dep_ in _SUBJ_DEPS:
+            return c, False
     anc = v
     while anc.dep_ == "conj":
         anc = anc.head
-        s = next((c for c in anc.children if c.dep_ in _SUBJ_DEPS), None)
-        if s is not None:
-            return s, True
+        for c in anc.children:
+            if c.dep_ in _SUBJ_DEPS:
+                return c, True
     return None, True
 
-
-def _clause_claims(root: Token, drop: set[int]) -> list[str] | None:
-    """
-    Split the main clause on coordinated verbs.
-    Returns None when there is nothing to split or a clause can't stand alone.
-    """
+def _clause_claims (root, drop):
+    # split coordinated clauses on verbs
     clauses = [root]
-    for v in clauses:                      # list grows while iterating (BFS)
-        clauses.extend(_conj_children(v))
-    if len(clauses) == 1:
+    idx = 0
+    while idx < len (clauses):
+        v = clauses [idx]
+        for child in _conj_children (v):
+            clauses.append (child)
+        idx = idx + 1
+    if len (clauses) == 1:
         return None
 
     claims = []
     for v in clauses:
-        subj, inherited = _find_subject(v)
+        subj, inherited = _find_subject (v)
         if subj is None:
             return None
 
-        excluded = set(drop)
+        excluded = set (drop)
         for c in v.children:
             if c.dep_ == "cc":
-                excluded.add(c.i)
-        for child in _conj_children(v):
-            excluded |= _idx(child.subtree)
+                excluded.add (c.i)
+        for child in _conj_children (v):
+            for t in child.subtree:
+                excluded.add (t.i)
 
-        subj_idx = _idx(subj.subtree)
-        body = [t for t in v.subtree if t.i not in excluded and t.i not in subj_idx]
+        subj_idx = set ()
+        for t in subj.subtree:
+            subj_idx.add (t.i)
+
+        body = []
+        for t in v.subtree:
+            if t.i not in excluded and t.i not in subj_idx:
+                body.append (t)
 
         # clause must carry something beyond the bare verb
-        if not any(t.dep_ in _COMPLEMENT_DEPS for t in body):
+        has_complement = False
+        for t in body:
+            if t.dep_ in _COMPLEMENT_DEPS:
+                has_complement = True
+                break
+        if not has_complement:
             return None
 
         if inherited:
-            subj_toks = [t for t in subj.subtree if t.i not in drop]
-            # "was created by X and released in 1991" -> keep the passive aux
+            subj_toks = []
+            for t in subj.subtree:
+                if t.i not in drop:
+                    subj_toks.append (t)
             aux = []
-            if v.tag_ == "VBN" and not any(c.dep_.startswith("aux") for c in v.children):
-                aux = [c for c in subj.head.children if c.dep_ in {"auxpass", "aux"}]
-            text = " ".join(filter(None, [_text(subj_toks), _text(aux), _text(body)]))
+            if v.tag_ == "VBN":
+                has_aux = False
+                for c in v.children:
+                    if c.dep_.startswith ("aux"):
+                        has_aux = True
+                        break
+                if not has_aux:
+                    for c in subj.head.children:
+                        if c.dep_ == "auxpass" or c.dep_ == "aux":
+                            aux.append (c)
+            parts = []
+            subj_text = _text (subj_toks)
+            if len (subj_text) > 0:
+                parts.append (subj_text)
+            aux_text = _text (aux)
+            if len (aux_text) > 0:
+                parts.append (aux_text)
+            body_text = _text (body)
+            if len (body_text) > 0:
+                parts.append (body_text)
+            text = " ".join (parts)
         else:
-            text = _text([t for t in v.subtree if t.i not in excluded])
+            toks = []
+            for t in v.subtree:
+                if t.i not in excluded:
+                    toks.append (t)
+            text = _text (toks)
 
-        cleaned = _clean(text)
-        if len(cleaned.split()) < _MIN_WORDS:
+        cleaned = _clean (text)
+        if len (cleaned.split ()) < _MIN_WORDS:
             return None
-        claims.append((v.i, cleaned))
+        claims.append ((v.i, cleaned))
 
-    return [c for _, c in sorted(claims)]
+    claims = sorted (claims, key = lambda item: item [0])
+    result = []
+    for item in claims:
+        result.append (item [1])
+    return result
 
+def _decompose_sentence (sent):
+    # decompose a single sentence
+    embedded = _embedded_spans (sent)
+    drop = _embedded_drop (embedded)
 
-# ---------------------------------------------------------------------------
-# public API
-# ---------------------------------------------------------------------------
-
-def _decompose_sentence(sent: Span) -> list[str]:
-    embedded = _embedded_spans(sent)
-    drop = _embedded_drop(embedded)
-
-    main = _clause_claims(sent.root, drop)
+    main = _clause_claims (sent.root, drop)
     if main is None:
-        # no verb split: the main claim is the sentence minus embedded phrases
-        main = [_clean(_text([t for t in sent if t.i not in drop]))]
+        toks = []
+        for t in sent:
+            if t.i not in drop:
+                toks.append (t)
+        main = [_clean (_text (toks))]
 
-    return main + _embedded_claims(embedded, drop)
+    return main + _embedded_claims (embedded, drop)
 
-
-def decompose(sentence: str) -> list[str]:
-    """
-    Split `sentence` into atomic, self-contained sub-claims.
-    Always returns at least one claim; falls back to [sentence].
-    """
-    sentence = sentence.strip()
-    if not sentence:
+def decompose (sentence):
+    # split sentence into atomic self-contained sub-claims
+    sentence = sentence.strip ()
+    if len (sentence) == 0:
         return []
     try:
-        doc = _get_nlp()(sentence)
-        claims: list[str] = []
+        nlp = _get_nlp ()
+        doc = nlp (sentence)
+        claims = []
         for sent in doc.sents:
-            claims.extend(_decompose_sentence(sent))
+            for c in _decompose_sentence (sent):
+                claims.append (c)
 
-        seen, final = set(), []
+        seen = set ()
+        final = []
         for c in claims:
-            key = c.lower().rstrip(".")
-            if c and key not in seen and len(c.split()) >= _MIN_WORDS:
-                seen.add(key)
-                final.append(c)
-        return final or [sentence]
-    except Exception as exc:  # never break the pipeline
-        logger.warning("Decomposition failed, returning sentence unchanged: %s", exc)
+            key = c.lower ().rstrip (".")
+            if len (c) > 0 and key not in seen and len (c.split ()) >= _MIN_WORDS:
+                seen.add (key)
+                final.append (c)
+        if len (final) > 0:
+            return final
+        return [sentence]
+    except Exception as exc:
+        logger.warning ("Decomposition failed, returning sentence unchanged: %s", exc)
         return [sentence]

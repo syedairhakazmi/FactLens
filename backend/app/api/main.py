@@ -224,28 +224,30 @@ def analyze_pipeline (payload: AnalyzeRequest):
         overall_confidence = None
     else:
         all_opinion = False
-        all_supported = True
-        has_refuted = False
-        has_supported = False
+        supported_count = 0
+        refuted_count = 0
+        nee_count = 0
         confidence_scores = []
 
         for fact_claim in factual_claims:
-            if fact_claim.verdict == "Refuted":
-                has_refuted = True
-                all_supported = False
-            elif fact_claim.verdict == "Supported":
-                has_supported = True
+            if fact_claim.verdict == "Supported":
+                supported_count = supported_count + 1
+            elif fact_claim.verdict == "Refuted":
+                refuted_count = refuted_count + 1
             else:
-                all_supported = False
+                nee_count = nee_count + 1
             if fact_claim.confidence is not None:
                 confidence_scores.append (fact_claim.confidence)
 
-        if has_refuted:
-            overall_verdict = "Refuted"
-        elif all_supported and has_supported:
+        total_claims = len (factual_claims)
+        if supported_count == total_claims and total_claims > 0:
             overall_verdict = "Supported"
-        else:
+        elif refuted_count == total_claims and total_claims > 0:
+            overall_verdict = "Refuted"
+        elif nee_count == total_claims and total_claims > 0:
             overall_verdict = "Not Enough Evidence"
+        else:
+            overall_verdict = "Mixed"
 
         if len (confidence_scores) > 0:
             overall_confidence = int (sum (confidence_scores) / len (confidence_scores))
