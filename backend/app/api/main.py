@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.claims.detector import extract_claims
 from app.coreference.resolver import resolve
+from app.decomposition import decompose
 from app.retrieval.searcher import retrieve
 from app.verification.verifier import verify_claim
 
@@ -63,6 +64,18 @@ DEFAULT_EVIDENCE_CORPUS = [
         "Python is a high-level, general-purpose programming language developed by Guido van Rossum and first released in 1991.",
         "Local corpus",
     ),
+    (
+        "Tokyo is the capital and most populous prefecture of Japan.",
+        "Local corpus",
+    ),
+    (
+        "Python is a genus of constricting snakes in the Pythonidae family native to the tropics and subtropics of the Eastern Hemisphere.",
+        "Local corpus",
+    ),
+    (
+        "Cairo is the capital and largest city of Egypt.",
+        "Local corpus",
+    ),
 ]
 
 class AnalyzeRequest (BaseModel):
@@ -113,6 +126,8 @@ def analyze_pipeline (payload: AnalyzeRequest):
     raw_text = payload.text.strip ()
     if len (raw_text) == 0:
         raise HTTPException (status_code = 400, detail = "Input text must not be empty.")
+    if len (raw_text) > 50000:
+        raise HTTPException (status_code = 413, detail = "Input text exceeds maximum allowed length.")
 
     # 1. coreference resolution
     coreference_result = resolve (raw_text)
@@ -133,51 +148,66 @@ def analyze_pipeline (payload: AnalyzeRequest):
                         )
 
     # 2. extract claims
+    raw_sentences = extract_claims (raw_text)
     classified_sentences = extract_claims (resolved_full_text)
 
     # 3. retrieve evidence and verify claims
     sub_claims = []
+    sentence_index = 0
     for classified_item in classified_sentences:
+        raw_sentence_text = classified_item.text
+        if sentence_index < len (raw_sentences):
+            raw_sentence_text = raw_sentences [sentence_index].text
+        sentence_index = sentence_index + 1
+
+        is_coref_modified = False
+        if raw_sentence_text.strip () != classified_item.text.strip ():
+            is_coref_modified = True
+
         if not classified_item.is_checkable:
             sub_claims.append (
                 SubClaimResult (
-                    text = classified_item.text,
+                    text = raw_sentence_text,
                     status = "Opinion",
                     reason = classified_item.reason,
                 )
             )
         else:
-            found_passages = retrieve (classified_item.text, top_k = 1)
-            top_passage = None
-            if len (found_passages) > 0:
-                top_passage = found_passages [0]
+            atomic_claims = decompose (classified_item.text)
+            for atomic_claim in atomic_claims:
+                found_passages = retrieve (atomic_claim, top_k = 1)
+                top_passage = None
+                if len (found_passages) > 0:
+                    top_passage = found_passages [0]
 
-            verification_result = verify_claim (classified_item.text, top_passage)
+                verification_result = verify_claim (atomic_claim, top_passage)
 
-            resolved_value = None
-            if classified_item.text != raw_text:
-                resolved_value = classified_item.text
+                claim_display_text = atomic_claim
+                resolved_value = None
+                if is_coref_modified:
+                    claim_display_text = raw_sentence_text
+                    resolved_value = atomic_claim
 
-            bm25_value = None
-            embedding_value = None
-            if top_passage is not None:
-                bm25_value = round (top_passage.bm25_score, 4)
-                embedding_value = round (top_passage.embedding_score, 4)
+                bm25_value = None
+                embedding_value = None
+                if top_passage is not None:
+                    bm25_value = round (top_passage.bm25_score, 4)
+                    embedding_value = round (top_passage.embedding_score, 4)
 
-            sub_claims.append (
-                SubClaimResult (
-                    text = classified_item.text,
-                    resolved_text = resolved_value,
-                    status = "Fact",
-                    verdict = verification_result.verdict,
-                    confidence = verification_result.confidence,
-                    evidence = verification_result.evidence_text,
-                    source = verification_result.evidence_source,
-                    reason = verification_result.reason,
-                    bm25_score = bm25_value,
-                    embedding_score = embedding_value,
+                sub_claims.append (
+                    SubClaimResult (
+                        text = claim_display_text,
+                        resolved_text = resolved_value,
+                        status = "Fact",
+                        verdict = verification_result.verdict,
+                        confidence = verification_result.confidence,
+                        evidence = verification_result.evidence_text,
+                        source = verification_result.evidence_source,
+                        reason = verification_result.reason,
+                        bm25_score = bm25_value,
+                        embedding_score = embedding_value,
+                    )
                 )
-            )
 
     # 4. aggregate verdict
     factual_claims = []
@@ -194,6 +224,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
         overall_confidence = None
     else:
         all_opinion = False
+        all_supported = True
         has_refuted = False
         has_supported = False
         confidence_scores = []
@@ -201,14 +232,17 @@ def analyze_pipeline (payload: AnalyzeRequest):
         for fact_claim in factual_claims:
             if fact_claim.verdict == "Refuted":
                 has_refuted = True
+                all_supported = False
             elif fact_claim.verdict == "Supported":
                 has_supported = True
+            else:
+                all_supported = False
             if fact_claim.confidence is not None:
                 confidence_scores.append (fact_claim.confidence)
 
         if has_refuted:
             overall_verdict = "Refuted"
-        elif has_supported:
+        elif all_supported and has_supported:
             overall_verdict = "Supported"
         else:
             overall_verdict = "Not Enough Evidence"

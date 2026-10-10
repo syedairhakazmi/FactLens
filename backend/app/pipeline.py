@@ -3,13 +3,15 @@ from dataclasses import dataclass, field
 
 from app.coreference.resolver import resolve, CoreferenceResult
 from app.claims.detector import extract_claims, ClassifiedSentence
+from app.decomposition import decompose
 from app.retrieval.searcher import retrieve, RetrievedPassage
 from app.verification.verifier import verify_claim, VerificationResult
 
 logger = logging.getLogger ("factlens")
 
-def _decompose (sentence):
-    return [sentence]
+# Alias for backwards compatibility
+_decompose = decompose
+
 
 @dataclass
 class ClaimResult:
@@ -79,6 +81,18 @@ DEFAULT_EVIDENCE_CORPUS = [
         "Guido van Rossum and first released in 1991.",
         "Local corpus",
     ),
+    (
+        "Tokyo is the capital and most populous prefecture of Japan.",
+        "Local corpus",
+    ),
+    (
+        "Python is a genus of constricting snakes in the Pythonidae family native to the tropics and subtropics of the Eastern Hemisphere.",
+        "Local corpus",
+    ),
+    (
+        "Cairo is the capital and largest city of Egypt.",
+        "Local corpus",
+    ),
 ]
 
 def run_pipeline (text, corpus = None, top_k = 1):
@@ -93,6 +107,8 @@ def run_pipeline (text, corpus = None, top_k = 1):
     # 2. claim extraction and opinion check
     classified_sentences = extract_claims (resolved_text)
 
+    claim_cache = {}
+
     for classified_item in classified_sentences:
         if not classified_item.is_checkable:
             result.claims.append (
@@ -106,17 +122,21 @@ def run_pipeline (text, corpus = None, top_k = 1):
             continue
 
         # 3. claim decomposition
-        sub_claims = _decompose (classified_item.text)
+        sub_claims = decompose (classified_item.text)
 
         for sub_claim in sub_claims:
-            # 4. evidence retrieval
-            found_passages = retrieve (sub_claim, corpus, top_k = top_k)
-            top_passage = None
-            if len (found_passages) > 0:
-                top_passage = found_passages [0]
+            if sub_claim in claim_cache:
+                top_passage, verification_result = claim_cache [sub_claim]
+            else:
+                # 4. evidence retrieval
+                found_passages = retrieve (sub_claim, corpus, top_k = top_k)
+                top_passage = None
+                if len (found_passages) > 0:
+                    top_passage = found_passages [0]
 
-            # 5. verification
-            verification_result = verify_claim (sub_claim, top_passage)
+                # 5. verification
+                verification_result = verify_claim (sub_claim, top_passage)
+                claim_cache [sub_claim] = (top_passage, verification_result)
 
             result.claims.append (
                 ClaimResult (
@@ -144,6 +164,7 @@ def run_pipeline (text, corpus = None, top_k = 1):
         result.overall_verdict = "Not Applicable"
         result.overall_confidence = None
     else:
+        all_supported = True
         has_refuted = False
         has_supported = False
         confidence_scores = []
@@ -152,14 +173,17 @@ def run_pipeline (text, corpus = None, top_k = 1):
             if fact_claim.verification is not None:
                 if fact_claim.verification.verdict == "Refuted":
                     has_refuted = True
+                    all_supported = False
                 elif fact_claim.verification.verdict == "Supported":
                     has_supported = True
+                else:
+                    all_supported = False
                 if fact_claim.verification.confidence is not None:
                     confidence_scores.append (fact_claim.verification.confidence)
 
         if has_refuted:
             result.overall_verdict = "Refuted"
-        elif has_supported:
+        elif all_supported and has_supported:
             result.overall_verdict = "Supported"
         else:
             result.overall_verdict = "Not Enough Evidence"

@@ -43,9 +43,29 @@ def _get_model ():
         return None
 
 def extract_sentences (text):
+    # normalize repeated punctuation like !!! or ??? to prevent fragmented splitting
+    normalized = text
+    while "!!" in normalized:
+        normalized = normalized.replace ("!!", "!")
+    while "??" in normalized:
+        normalized = normalized.replace ("??", "?")
+    while ".." in normalized:
+        normalized = normalized.replace ("..", ".")
+
+    # if all uppercase shouting text with internal punctuation, normalize internal marks
+    tokens = normalized.split ()
+    if len (tokens) >= 3 and normalized.isupper ():
+        cleaned_tokens = []
+        for i, t in enumerate (tokens):
+            if i < len (tokens) - 1:
+                cleaned_tokens.append (t.replace ("!", "").replace ("?", "").replace (".", ""))
+            else:
+                cleaned_tokens.append (t)
+        normalized = " ".join (cleaned_tokens)
+
     # split text into sentences using spacy
     nlp = _get_nlp ()
-    doc = nlp (text)
+    doc = nlp (normalized)
     sentences = []
     for sent in doc.sents:
         cleaned = sent.text.strip ()
@@ -54,8 +74,59 @@ def extract_sentences (text):
     return sentences
 
 def _rule_precheck (sentence):
+    # filter out questions
+    trimmed = sentence.strip ()
+    if trimmed.endswith ("?"):
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Questions are inquiries rather than verifiable factual claims",
+        )
+
+    # filter out imperative commands and invitations
+    lowered = trimmed.lower ()
+    imperatives = ["visit ", "please ", "check ", "go to ", "look at ", "tell me ", "remember ", "download ", "eat ", "buy "]
+    for imp in imperatives:
+        if lowered.startswith (imp):
+            return ClassifiedSentence (
+                text = sentence,
+                is_checkable = False,
+                reason = "Imperatives and requests are not factual claims",
+            )
+
+    doc_pre = _get_nlp () (sentence)
+    if len (doc_pre) > 0:
+        first_token = doc_pre [0]
+        has_subject = False
+        for token in doc_pre:
+            if "subj" in token.dep_:
+                has_subject = True
+                break
+        if not has_subject and (first_token.pos_ == "VERB" or first_token.tag_ in ("VB", "VBP")):
+            return ClassifiedSentence (
+                text = sentence,
+                is_checkable = False,
+                reason = "Imperatives and requests are not factual claims",
+            )
+
+    # filter out exclamatory opinion phrases
+    if lowered.startswith ("what a ") or lowered.startswith ("what an "):
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Exclamatory phrase expresses subjective opinion",
+        )
+
+    # filter out incomplete fragments with fewer than 3 words (e.g. 'It is.', 'Yes.')
+    clean_words = sentence.translate (str.maketrans ("", "", string.punctuation)).split ()
+    if len (clean_words) < 3:
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Sentence fragment is too brief to form a complete checkable assertion",
+        )
+
     # quick check for first person opinion phrases
-    lowered = sentence.lower ().strip ()
     for opener in _SUBJECTIVE_OPENERS:
         if lowered.startswith (opener):
             return ClassifiedSentence (
@@ -63,6 +134,26 @@ def _rule_precheck (sentence):
                 is_checkable = False,
                 reason = f"Opens with first-person subjective framing ('{opener}')",
             )
+
+    # verify that sentence contains at least one verb or copula
+    doc = _get_nlp () (sentence)
+    has_predicate = False
+    for token in doc:
+        if token.pos_ in ("VERB", "AUX"):
+            has_predicate = True
+            break
+    if not has_predicate and sentence.isupper ():
+        for token in _get_nlp () (sentence.lower ()):
+            if token.pos_ in ("VERB", "AUX"):
+                has_predicate = True
+                break
+    if not has_predicate:
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Sentence lacks a verb or predicate to form a checkable assertion",
+        )
+
     return None
 
 def _rule_fallback (sentence):
@@ -155,10 +246,31 @@ def classify_many (sentences):
             for idx in pending_indices:
                 results [idx] = _rule_fallback (sentences [idx])
         else:
-            batch_scores = model (pending_sentences)
+            prepared_sentences = []
+            for s in pending_sentences:
+                cleaned_item = s.strip ()
+                if len (cleaned_item) > 0:
+                    cleaned_item = cleaned_item [0].upper () + cleaned_item [1:]
+                    if not cleaned_item.endswith (".") and not cleaned_item.endswith ("?") and not cleaned_item.endswith ("!"):
+                        cleaned_item = cleaned_item + "."
+                prepared_sentences.append (cleaned_item)
+
+            unique_prepared = []
+            for item in prepared_sentences:
+                if item not in unique_prepared:
+                    unique_prepared.append (item)
+
+            unique_scores = model (unique_prepared)
+            score_cache = {}
+            u_index = 0
+            for item in unique_prepared:
+                score_cache [item] = unique_scores [u_index]
+                u_index = u_index + 1
+
             pos = 0
-            for scores in batch_scores:
+            for prep in prepared_sentences:
                 target_idx = pending_indices [pos]
+                scores = score_cache [prep]
                 results [target_idx] = _from_model_scores (sentences [target_idx], scores)
                 pos = pos + 1
 
