@@ -111,11 +111,12 @@ def run_pipeline (text, corpus = None, top_k = 1):
 
     for classified_item in classified_sentences:
         if not classified_item.is_checkable:
+            category_label = getattr (classified_item, "category", "Non-Checkable")
             result.claims.append (
                 ClaimResult (
                     original_sentence = classified_item.text,
                     decomposed_text = classified_item.text,
-                    status = "Opinion",
+                    status = category_label,
                     reason = classified_item.reason,
                 )
             )
