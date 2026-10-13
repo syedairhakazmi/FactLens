@@ -8,6 +8,7 @@ from app.coreference.resolver import resolve
 from app.decomposition import decompose
 from app.retrieval.searcher import retrieve
 from app.verification.verifier import verify_claim
+from app.translation.translator import is_urdu, translate_ur_to_en, translate_en_to_ur, get_urdu_verdict, get_urdu_reason
 
 app = FastAPI (title = "FactLens API", version = "1.0.0")
 
@@ -87,20 +88,27 @@ class CorefLink (BaseModel):
 
 class SubClaimResult (BaseModel):
     text: str
+    text_ur: Optional [str] = None
     resolved_text: Optional [str] = None
     status: str
+    status_ur: Optional [str] = None
     verdict: Optional [str] = None
+    verdict_ur: Optional [str] = None
     confidence: Optional [int] = None
     evidence: Optional [str] = None
+    evidence_ur: Optional [str] = None
     source: Optional [str] = None
     reason: Optional [str] = None
+    reason_ur: Optional [str] = None
     bm25_score: Optional [float] = None
     embedding_score: Optional [float] = None
 
 class FactCheckResponse (BaseModel):
     overall_verdict: str
+    overall_verdict_ur: Optional [str] = None
     overall_confidence: Optional [int] = None
     all_opinion: bool
+    language: str = "en"
     used_retry: bool = False
     used_wikipedia_fallback: bool = False
     coref_resolutions: list [CorefLink]
@@ -114,6 +122,8 @@ class HateSpeechResponse (BaseModel):
 
 class FullPipelineResponse (BaseModel):
     original_text: str
+    original_text_en: Optional [str] = None
+    language: str = "en"
     fact_check: FactCheckResponse
     hate_speech: HateSpeechResponse
 
@@ -129,8 +139,19 @@ def analyze_pipeline (payload: AnalyzeRequest):
     if len (raw_text) > 50000:
         raise HTTPException (status_code = 413, detail = "Input text exceeds maximum allowed length.")
 
+    # language detection and translation
+    input_is_urdu = is_urdu (raw_text)
+    if input_is_urdu:
+        input_language = "ur"
+        text_for_pipeline = translate_ur_to_en (raw_text)
+        original_text_en = text_for_pipeline
+    else:
+        input_language = "en"
+        text_for_pipeline = raw_text
+        original_text_en = None
+
     # 1. coreference resolution
-    coreference_result = resolve (raw_text)
+    coreference_result = resolve (text_for_pipeline)
     resolved_full_text = coreference_result.resolved_text
 
     coreference_links = []
@@ -148,7 +169,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
                         )
 
     # 2. extract claims
-    raw_sentences = extract_claims (raw_text)
+    raw_sentences = extract_claims (text_for_pipeline)
     classified_sentences = extract_claims (resolved_full_text)
 
     # 3. retrieve evidence and verify claims
@@ -166,11 +187,21 @@ def analyze_pipeline (payload: AnalyzeRequest):
 
         if not classified_item.is_checkable:
             category_label = getattr (classified_item, "category", "Non-Checkable")
+            sub_text_ur = None
+            status_ur_val = None
+            reason_ur_val = None
+            if input_is_urdu:
+                sub_text_ur = translate_en_to_ur (raw_sentence_text)
+                status_ur_val = get_urdu_verdict (category_label)
+                reason_ur_val = get_urdu_reason (classified_item.reason)
             sub_claims.append (
                 SubClaimResult (
                     text = raw_sentence_text,
+                    text_ur = sub_text_ur,
                     status = category_label,
+                    status_ur = status_ur_val,
                     reason = classified_item.reason,
+                    reason_ur = reason_ur_val,
                 )
             )
         else:
@@ -195,16 +226,34 @@ def analyze_pipeline (payload: AnalyzeRequest):
                     bm25_value = round (top_passage.bm25_score, 4)
                     embedding_value = round (top_passage.embedding_score, 4)
 
+                sub_text_ur = None
+                verdict_ur_val = None
+                status_ur_val = None
+                reason_ur_val = None
+                evidence_ur_val = None
+                if input_is_urdu:
+                    sub_text_ur = translate_en_to_ur (claim_display_text)
+                    verdict_ur_val = get_urdu_verdict (verification_result.verdict)
+                    status_ur_val = get_urdu_verdict ("Fact")
+                    reason_ur_val = get_urdu_reason (verification_result.reason)
+                    if verification_result.evidence_text is not None:
+                        evidence_ur_val = translate_en_to_ur (verification_result.evidence_text)
+
                 sub_claims.append (
                     SubClaimResult (
                         text = claim_display_text,
+                        text_ur = sub_text_ur,
                         resolved_text = resolved_value,
                         status = "Fact",
+                        status_ur = status_ur_val,
                         verdict = verification_result.verdict,
+                        verdict_ur = verdict_ur_val,
                         confidence = verification_result.confidence,
                         evidence = verification_result.evidence_text,
+                        evidence_ur = evidence_ur_val,
                         source = verification_result.evidence_source,
                         reason = verification_result.reason,
+                        reason_ur = reason_ur_val,
                         bm25_score = bm25_value,
                         embedding_score = embedding_value,
                     )
@@ -255,8 +304,12 @@ def analyze_pipeline (payload: AnalyzeRequest):
         else:
             overall_confidence = None
 
+    overall_verdict_ur = None
+    if input_is_urdu:
+        overall_verdict_ur = get_urdu_verdict (overall_verdict)
+
     # 5. hate speech check
-    lower_text = raw_text.lower ()
+    lower_text = text_for_pipeline.lower ()
     hate_keywords = ["animals", "vermin", "parasites", "subhuman", "criminals", "should be thrown out", "sent back"]
     matched_words = []
     for word in hate_keywords:
@@ -280,10 +333,14 @@ def analyze_pipeline (payload: AnalyzeRequest):
 
     return FullPipelineResponse (
         original_text = raw_text,
+        original_text_en = original_text_en,
+        language = input_language,
         fact_check = FactCheckResponse (
             overall_verdict = overall_verdict,
+            overall_verdict_ur = overall_verdict_ur,
             overall_confidence = overall_confidence,
             all_opinion = all_opinion,
+            language = input_language,
             used_retry = False,
             used_wikipedia_fallback = False,
             coref_resolutions = coreference_links,

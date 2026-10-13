@@ -162,6 +162,25 @@ def _rule_precheck (sentence):
             category = "Non-Checkable",
         )
 
+    # verify that sentence contains meaningful content words
+    has_content = False
+    for token in doc:
+        if token.pos_ in ("NOUN", "PROPN", "VERB", "ADJ", "NUM"):
+            has_content = True
+            break
+    if not has_content and sentence.isupper ():
+        for token in _get_nlp () (sentence.lower ()):
+            if token.pos_ in ("NOUN", "PROPN", "VERB", "ADJ", "NUM"):
+                has_content = True
+                break
+    if not has_content:
+        return ClassifiedSentence (
+            text = sentence,
+            is_checkable = False,
+            reason = "Sentence lacks content words (nouns, adjectives, or verbs) to form a meaningful assertion",
+            category = "Non-Checkable",
+        )
+
     return None
 
 def _rule_fallback (sentence):
