@@ -22,3 +22,6 @@ datasets_cache/
 # Node (once the frontend is set up as a real project)
 frontend/node_modules/
 frontend/dist/
+
+# Archives
+*.zip
