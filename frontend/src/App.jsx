@@ -156,6 +156,7 @@ function GlobalStyle() {
 const EXAMPLES = [
   { id: "eiffel", kind: "factcheck", label: "Historic / Landmark", sub: "FEVER benchmark evidence match", text: "The Eiffel Tower was completed in 1889." },
   { id: "coref", kind: "factcheck", label: "Pronoun resolution", sub: "fastcoref resolves pronouns across sentences", text: "The COVID-19 vaccine received official authorization. It was evaluated in randomized clinical trials." },
+  { id: "urdu", kind: "factcheck", label: "اردو ان پٹ (Urdu Claim)", sub: "Bilingual auto-translation & verification", text: "پیرس فرانس کا دارالحکومت ہے۔" },
   { id: "opinion", kind: "factcheck", label: "Subjective opinion", sub: "spaCy fact vs opinion filtering", text: "I think this is the most wonderful restaurant in the city." },
   { id: "science", kind: "factcheck", label: "Scientific fact", sub: "SciFact physical science match", text: "Water boils at 100 degrees Celsius at standard atmospheric pressure." },
   { id: "vaccine", kind: "factcheck", label: "Refuted medical claim", sub: "SciFact clinical evidence match", text: "The COVID-19 vaccine causes infertility in most patients." },
@@ -249,6 +250,38 @@ const MOCK_RESPONSES = {
   targeted: {
     factCheck: { overallVerdict: "Not Applicable", overallConfidence: null, allOpinion: false, usedRetry: false, usedWikipediaFallback: false, corefResolutions: [], subClaims: [] },
     hateSpeech: { classification: "Hate", target: "People from that country / national-origin group", cues: ["that country", "all criminals"], reason: "Generalizes an entire group as criminal and calls for their removal - a dehumanizing generalization plus an exclusionary call to action." },
+  },
+  urdu: {
+    isLiveBackend: false,
+    language: "ur",
+    originalTextEn: "Paris is the capital of France.",
+    factCheck: {
+      overallVerdict: "Supported",
+      overallVerdictUr: "تصدیق شدہ",
+      overallConfidence: 94,
+      allOpinion: false,
+      language: "ur",
+      originalTextEn: "Paris is the capital of France.",
+      usedRetry: false,
+      usedWikipediaFallback: false,
+      corefResolutions: [],
+      subClaims: [
+        {
+          text: "پیرس فرانس کا دارالحکومت ہے۔",
+          textEn: "Paris is the capital of France.",
+          textUr: "پیرس فرانس کا دارالحکومت ہے۔",
+          status: "Fact",
+          statusUr: "حقیقی دعویٰ",
+          verdict: "Supported",
+          verdictUr: "تصدیق شدہ",
+          confidence: 94,
+          evidence: "پیرس فرانس کا دارالحکومت اور سب سے بڑا شہر ہے۔",
+          evidenceEn: "Paris is the capital and most populous city of France.",
+          source: "Unified Benchmark Corpus (FEVER)",
+        },
+      ],
+    },
+    hateSpeech: { classification: "Normal", target: "None", cues: [], reason: "کوئی توہین آمیز مواد نہیں پایا گیا۔" },
   },
 };
 
@@ -426,36 +459,37 @@ function Stamp({ label, icon: Icon, color, rotate = -5 }) {
   );
 }
 
-function VerdictStamp({ verdict, rotate }) {
-  return <Stamp label={verdict} icon={VERDICT_ICON[verdict] || HelpCircle} color={VERDICT_TEXT_COLOR[verdict] || C.inkFaint} rotate={rotate} />;
+function VerdictStamp({ verdict, verdictUr, rotate }) {
+  const label = verdictUr ? `${verdictUr} • ${verdict}` : verdict;
+  return <Stamp label={label} icon={VERDICT_ICON[verdict] || HelpCircle} color={VERDICT_TEXT_COLOR[verdict] || C.inkFaint} rotate={rotate} />;
 }
 
-function VerdictPill({ verdict }) {
+function VerdictPill({ verdict, verdictUr }) {
   const color = VERDICT_TEXT_COLOR[verdict] || C.inkFaint;
   const bg = verdict === "Supported" ? C.supportedSoft : verdict === "Refuted" ? C.refutedSoft : verdict === "Not Enough Evidence" ? C.highlightSoft : verdict === "Mixed" ? "#FEF3C7" : C.paperSoft;
   const Icon = VERDICT_ICON[verdict] || HelpCircle;
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color, backgroundColor: bg, fontFamily: BODY }}>
       <Icon className="w-3.5 h-3.5" />
-      {verdict}
+      {verdictUr ? `${verdictUr} (${verdict})` : verdict}
     </span>
   );
 }
 
-function OpinionPill() {
+function OpinionPill({ label = "Opinion" }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: C.opinion, backgroundColor: C.opinionSoft, fontFamily: BODY }}>
       <MessageSquare className="w-3.5 h-3.5" />
-      Opinion
+      {label}
     </span>
   );
 }
 
-function NonCheckablePill() {
+function NonCheckablePill({ label = "Non-Checkable" }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "#854D0E", backgroundColor: "#FEF9C3", fontFamily: BODY }}>
       <HelpCircle className="w-3.5 h-3.5" />
-      Non-Checkable
+      {label}
     </span>
   );
 }
@@ -791,37 +825,46 @@ function SubClaimCard({ claim, index }) {
   const [open, setOpen] = useState(index === 0);
   const isOpinion = claim.status === "Opinion";
   const isNonCheckable = claim.status === "Non-Checkable";
+  const isUrdu = !!claim.textUr;
   const color = VERDICT_TEXT_COLOR[claim.verdict] || C.inkFaint;
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: `2px solid ${C.line}`, backgroundColor: C.paperRaised }}>
       <button onClick={() => setOpen((o) => !o)} className="fl-claim-row w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left">
         <div className="flex items-center gap-3 min-w-0">
           <span className="shrink-0 text-xs font-bold w-5" style={{ fontFamily: MONO, color: C.inkFaint }}>{String(index + 1).padStart(2, "0")}</span>
-          <span className="text-sm truncate" style={{ color: C.ink, fontFamily: BODY }}>{claim.text}</span>
+          <span className="text-sm truncate" style={{ color: C.ink, fontFamily: BODY }} dir={isUrdu ? "rtl" : "ltr"}>{claim.text}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {isOpinion ? <OpinionPill /> : isNonCheckable ? <NonCheckablePill /> : <VerdictPill verdict={claim.verdict} />}
+          {isOpinion ? <OpinionPill label={claim.statusUr || "Opinion"} /> : isNonCheckable ? <NonCheckablePill label={claim.statusUr || "Non-Checkable"} /> : <VerdictPill verdict={claim.verdict} verdictUr={claim.verdictUr} />}
           <ChevronDown className="w-4 h-4" style={{ color: C.inkFaint, transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s ease" }} />
         </div>
       </button>
       {open && (
         <div className="fl-expand px-4 pb-4 pt-1 ml-8" style={{ borderTop: `2px dashed ${C.line}` }}>
+          {isUrdu && claim.textEn && claim.textEn !== claim.text && (
+            <div className="mt-2.5 mb-2 p-2 rounded text-xs" style={{ backgroundColor: C.paperSoft, border: `1px dashed ${C.line}` }}>
+              <span className="font-bold text-gray-500 uppercase tracking-wide mr-1.5 font-mono">English pipeline text:</span>
+              <span className="italic" style={{ color: C.ink }}>"{claim.textEn}"</span>
+            </div>
+          )}
           {isOpinion ? (
-            <p className="text-sm leading-relaxed pt-3" style={{ color: C.inkSoft, fontFamily: BODY }}>
-              Opinion - subjective statement, so it will not be fact-checked. FactLens only sends checkable factual assertions through evidence retrieval and verification.
+            <p className="text-sm leading-relaxed pt-3" style={{ color: C.inkSoft, fontFamily: BODY }} dir={isUrdu ? "rtl" : "ltr"}>
+              {claim.reason || "رائے - ذاتی نقطہ نظر ہے، اس لیے اس کی حقائق کی بنیاد پر تصدیق نہیں کی جائے گی۔"}
             </p>
           ) : isNonCheckable ? (
             <div className="pt-3 flex flex-col gap-1.5">
               <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "#854D0E", fontFamily: MONO }}>
-                Non-Checkable Input
+                {claim.statusUr ? `${claim.statusUr} (Non-Checkable)` : "Non-Checkable Input"}
               </p>
-              <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>
+              <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }} dir={isUrdu ? "rtl" : "ltr"}>
                 {claim.reason || "Sentence fragment, question, or incomplete statement — does not form a checkable factual claim."}
               </p>
             </div>
           ) : (
             <>
-              <p className="text-xs font-semibold pt-3 mb-2" style={{ color: C.supported, fontFamily: BODY }}>Factual claim - sent for verification.</p>
+              <p className="text-xs font-semibold pt-3 mb-2" style={{ color: C.supported, fontFamily: BODY }}>
+                {isUrdu ? "حقائق پر مبنی دعویٰ — ثبوت اور تصدیق کا عمل مکمل" : "Factual claim - sent for verification."}
+              </p>
               {claim.resolvedText && claim.resolvedText.trim () !== claim.text.trim () && (
                 <div className="mb-3 flex flex-col gap-1">
                   <span className="text-xs" style={{ color: C.inkFaint, fontFamily: MONO }}>as written: <span style={{ color: C.inkSoft }}>{claim.text}</span></span>
@@ -835,7 +878,12 @@ function SubClaimCard({ claim, index }) {
                 </div>
                 <span className="text-xs font-medium w-9 text-right" style={{ color: C.inkSoft, fontFamily: MONO }}>{claim.confidence}%</span>
               </div>
-              <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>{claim.evidence}</p>
+              <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }} dir={isUrdu ? "rtl" : "ltr"}>{claim.evidence}</p>
+              {isUrdu && claim.evidenceEn && claim.evidenceEn !== claim.evidence && (
+                <p className="text-xs italic mt-1 text-gray-500" style={{ fontFamily: BODY }}>
+                  Source passage (EN): "{claim.evidenceEn}"
+                </p>
+              )}
               <div className="mt-2.5 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono" style={{ color: claim.source?.includes("Wikipedia") ? C.info : claim.source?.includes("SciFact") ? "#047857" : claim.source?.includes("FEVER") ? "#B45309" : claim.source?.includes("AVeriTeC") ? "#6D28D9" : claim.source?.includes("All Datasets") ? "#475569" : C.inkSoft, backgroundColor: claim.source?.includes("Wikipedia") ? C.infoSoft : claim.source?.includes("SciFact") ? "#D1FAE5" : claim.source?.includes("FEVER") ? "#FEF3C7" : claim.source?.includes("AVeriTeC") ? "#EDE9FE" : claim.source?.includes("All Datasets") ? "#F1F5F9" : C.paperSoft, border: `1px solid ${C.line}` }}>
                 <Database className="w-3.5 h-3.5" />
                 <span>{claim.source || "Unified Benchmark Corpus"}</span>
@@ -850,6 +898,7 @@ function SubClaimCard({ claim, index }) {
 }
 
 function TechDetails({ data, isHate = false }) {
+  const isUrdu = data.language === "ur";
   const rows = isHate
     ? [
         ["Model Architecture", "Fine-tuned contextual transformer (HateXplain baseline: Hate / Offensive / Normal)"],
@@ -859,6 +908,10 @@ function TechDetails({ data, isHate = false }) {
         ["Timeline Status", "Scheduled for Phase 1 Iteration 3 / FYP-2 development as committed in approved proposal"],
       ]
     : [
+        ...(isUrdu ? [
+          ["Input Language", "Urdu (اردو) — Detected automatically"],
+          ["Cross-Lingual Processing", "Neural translation to English for retrieval & bilingual response mapping"],
+        ] : []),
         ["Coreference links", data.corefResolutions.length ? data.corefResolutions.map((c) => `"${c.from}" → "${c.to}"`).join("; ") : "No pronouns required resolution in this text"],
         ["Fact vs opinion", `${data.subClaims.filter((c) => c.status === "Fact").length} factual assertions, ${data.subClaims.filter((c) => c.status === "Opinion").length} opinions${data.subClaims.some((c) => c.status === "Non-Checkable") ? `, ${data.subClaims.filter((c) => c.status === "Non-Checkable").length} non-checkable` : ""}`],
         ["Claim extraction", `${data.subClaims.length} sentence-level claims extracted using spaCy boundary detection`],
@@ -902,17 +955,25 @@ function FactCheckReport({ data, originalText, onCopied }) {
     );
   }
 
+  const isUrdu = data.language === "ur";
   const gaugeColor = VERDICT_TEXT_COLOR[data.overallVerdict] || C.inkFaint;
   const reportText = () => {
-    const lines = [`FactLens fact-check report`, `Text: "${originalText}"`, `Overall: ${data.overallVerdict}${data.overallConfidence != null ? ` (${data.overallConfidence}% confidence)` : ""}`, ""];
+    const lines = [
+      `FactLens fact-check report`,
+      `Text: "${originalText}"`,
+      data.originalTextEn ? `English Translation: "${data.originalTextEn}"` : "",
+      `Overall: ${data.overallVerdict}${data.overallVerdictUr ? ` (${data.overallVerdictUr})` : ""}${data.overallConfidence != null ? ` (${data.overallConfidence}% confidence)` : ""}`,
+      "",
+    ].filter(Boolean);
     data.subClaims.forEach((c, i) => {
       lines.push(`${i + 1}. ${c.text}`);
+      if (c.textEn && c.textEn !== c.text) lines.push(`   [EN]: ${c.textEn}`);
       if (c.status === "Opinion") {
         lines.push(`   Opinion - not fact-checked (${c.reason || "subjective statement"})`);
       } else if (c.status === "Non-Checkable") {
         lines.push(`   Non-Checkable - ${c.reason || "not a checkable factual claim"}`);
       } else {
-        lines.push(`   ${c.verdict} (${c.confidence}%) - ${c.evidence}`);
+        lines.push(`   ${c.verdict}${c.verdictUr ? ` (${c.verdictUr})` : ""} (${c.confidence}%) - ${c.evidence}`);
       }
     });
     return lines.join("\n");
@@ -925,7 +986,22 @@ function FactCheckReport({ data, originalText, onCopied }) {
           <Field>Original text</Field>
           <CopyButton getText={reportText} onCopied={onCopied} />
         </div>
-        <p className="mb-5 leading-relaxed" style={{ color: C.ink, fontFamily: BODY }}>{originalText}</p>
+
+        {isUrdu && (
+          <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: "#EFF6FF", color: "#1D4ED8", border: "1.5px solid #BFDBFE", fontFamily: BODY }}>
+            <Globe2 className="w-3.5 h-3.5 shrink-0" />
+            <span>اردو متن شناخت شدہ (Urdu Detected) — ترجمہ اور کثیر النسلی ڈیٹا بیس سے تصدیق فعال ہے</span>
+          </div>
+        )}
+
+        <p className="mb-3 leading-relaxed" style={{ color: C.ink, fontFamily: BODY, fontSize: isUrdu ? "1.15rem" : "1rem" }} dir={isUrdu ? "rtl" : "ltr"}>{originalText}</p>
+
+        {isUrdu && data.originalTextEn && (
+          <div className="mb-5 p-2.5 rounded-lg text-xs flex items-center gap-2" style={{ backgroundColor: C.paperSoft, border: `1px dashed ${C.line}` }}>
+            <span className="font-bold text-gray-500 uppercase tracking-wide shrink-0 font-mono">English Pipeline:</span>
+            <span className="italic truncate" style={{ color: C.inkSoft, fontFamily: BODY }}>"{data.originalTextEn}"</span>
+          </div>
+        )}
 
         {data.allOpinion ? (
           <div className="flex items-start gap-3 p-4 rounded-xl" style={{ backgroundColor: data.subClaims.some((c) => c.status === "Non-Checkable") ? "#FEF9C3" : C.opinionSoft }}>
@@ -934,7 +1010,7 @@ function FactCheckReport({ data, originalText, onCopied }) {
             ) : (
               <MessageSquare className="w-5 h-5 shrink-0 mt-0.5" style={{ color: C.opinion }} />
             )}
-            <p className="text-sm leading-relaxed font-medium" style={{ color: data.subClaims.some((c) => c.status === "Non-Checkable") ? "#854D0E" : "#4C1D95", fontFamily: BODY }}>
+            <p className="text-sm leading-relaxed font-medium" style={{ color: data.subClaims.some((c) => c.status === "Non-Checkable") ? "#854D0E" : "#4C1D95", fontFamily: BODY }} dir={isUrdu ? "rtl" : "ltr"}>
               {data.subClaims.some((c) => c.status === "Non-Checkable")
                 ? (data.subClaims.find((c) => c.status === "Non-Checkable")?.reason || "Sentence fragment is too brief to form a complete checkable assertion")
                 : (data.subClaims.find((c) => c.status === "Opinion")?.reason || "Opinion - not a factual claim, so it will not be fact-checked.")}
@@ -944,7 +1020,7 @@ function FactCheckReport({ data, originalText, onCopied }) {
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-3">
               {data.overallConfidence != null && <ConfidenceGauge value={data.overallConfidence} color={gaugeColor} />}
-              <VerdictStamp verdict={data.overallVerdict} />
+              <VerdictStamp verdict={data.overallVerdict} verdictUr={data.overallVerdictUr} />
             </div>
             {data.usedRetry && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" style={{ color: C.brand, backgroundColor: C.brandSoft, fontFamily: BODY }}>
@@ -1173,10 +1249,16 @@ export default function App() {
       });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const json = await res.json();
+      const isUrdu = json.language === "ur" || json.fact_check.language === "ur";
       return {
         isLiveBackend: true,
+        language: json.language || "en",
+        originalTextEn: json.original_text_en,
         factCheck: {
+          language: json.fact_check.language || json.language || "en",
+          originalTextEn: json.original_text_en,
           overallVerdict: json.fact_check.overall_verdict,
+          overallVerdictUr: json.fact_check.overall_verdict_ur,
           overallConfidence: json.fact_check.overall_confidence,
           allOpinion: json.fact_check.all_opinion,
           usedRetry: json.fact_check.used_retry,
@@ -1186,18 +1268,24 @@ export default function App() {
             to: r.to_mention,
           })),
           subClaims: json.fact_check.sub_claims.map((c) => ({
-            text: c.text,
+            text: (isUrdu && c.text_ur) ? c.text_ur : c.text,
+            textEn: c.text,
+            textUr: c.text_ur,
             resolvedText: c.resolved_text || undefined,
             status: c.status,
-            reason: c.reason,
+            statusUr: c.status_ur,
+            reason: (isUrdu && c.reason_ur) ? c.reason_ur : c.reason,
+            reasonEn: c.reason,
             verdict: c.verdict || "Not Enough Evidence",
+            verdictUr: c.verdict_ur,
             confidence: c.confidence || 50,
-            evidence: c.evidence || "No evidence found in local corpus.",
+            evidence: (isUrdu && c.evidence_ur) ? c.evidence_ur : (c.evidence || "No evidence found in local corpus."),
+            evidenceEn: c.evidence,
             source: c.source || "Local Evidence Corpus",
             searchTrail: c.bm25_score != null ? [
               { label: `BM25 keyword score: ${c.bm25_score}`, state: "done" },
               { label: `Semantic embedding score: ${c.embedding_score}`, state: "done" },
-              { label: `Retrieved evidence verdict: ${c.verdict}`, state: c.verdict === "Supported" ? "done" : "warn" },
+              { label: `Retrieved evidence verdict: ${c.verdict_ur || c.verdict}`, state: c.verdict === "Supported" ? "done" : "warn" },
             ] : undefined,
           })),
         },
