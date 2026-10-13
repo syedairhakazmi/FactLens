@@ -3,35 +3,32 @@
 ![CI](https://github.com/syedairhakazmi/FactLens/actions/workflows/ci.yml/badge.svg?branch=develop)
 ![Deploy](https://github.com/syedairhakazmi/FactLens/actions/workflows/cd.yml/badge.svg?branch=main)
 
-Fact-checking and hate speech detection platform, FYP at FAST-NUCES.
+A fact-checking system built as an FYP at FAST-NUCES. It takes a claim in English or Urdu, checks it against a knowledge base, and returns a verdict with evidence.
 
-## Repository structure
+## Project structure
 
 ```
 factlens/
-├── backend/          Python backend: retrieval, decomposition, verification,
-│                     hate speech classification, coreference resolution, API
-│   ├── app/          One folder per module, matches Work Division ownership
-│   ├── tests/        pytest test suite, run automatically by CI on every push
+├── backend/          Python backend (API, retrieval, verification, NLP)
+│   ├── app/          One folder per module
+│   ├── tests/        pytest tests — run by CI on every push
 │   └── requirements.txt
-├── frontend/         React + Vite prototype — becomes the real product
-│   ├── src/          React components (App.jsx is the main UI)
-│   ├── public/       Static assets (favicon, icons)
+├── frontend/         React + Vite UI
+│   ├── src/          Main UI lives in App.jsx
 │   └── package.json
 └── .github/
     └── workflows/
-        ├── ci.yml    CI — runs backend tests + frontend build on push & PR
-        └── cd.yml    CD — auto-deploys frontend to GitHub Pages on merge to main
+        ├── ci.yml    Runs tests + build on every push and PR
+        └── cd.yml    Deploys frontend to GitHub Pages when main is updated
 ```
 
-## Branching model
+## Branches
 
-- `main` — always working, nothing is pushed here directly
-- `develop` — integration branch, finished features land here first
-- `feature/<name>` — one branch per piece of work, merged into `develop`
-  via pull request once CI passes
+- `main` — stable, production-ready code
+- `develop` — features go here first before going to main
+- `feature/<name>` — one branch per feature, merged into develop via PR
 
-## Running tests locally
+## Running locally
 
 ### Backend
 ```bash
@@ -53,14 +50,11 @@ npm run lint    # check code quality
 
 ## CI/CD
 
-### Continuous Integration (CI)
-Every push and pull request to `main` or `develop` triggers two parallel jobs:
-1. **Backend Tests** — installs Python deps, downloads spaCy model, runs pytest
-2. **Frontend Build** — installs Node deps, runs ESLint, builds the Vite project
+Every push or PR to `main` or `develop` runs two checks automatically:
 
-A pull request should not be merged unless both checks pass.
+- **Backend Tests** — runs all pytest tests
+- **Frontend Build** — runs ESLint and builds the Vite project
 
-### Continuous Deployment (CD)
-When code is merged into `main`, the frontend is automatically built and
-deployed to **GitHub Pages**. This gives us a live, always-updated demo URL
-that the evaluators can access at any time.
+Both checks must pass before a PR can be merged.
+
+When code is merged into `main`, the frontend is auto-deployed to GitHub Pages.
