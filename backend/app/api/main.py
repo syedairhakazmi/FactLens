@@ -157,12 +157,16 @@ def analyze_pipeline (payload: AnalyzeRequest):
     coreference_links = []
     if coreference_result.clusters:
         for cluster in coreference_result.clusters:
-            if len(cluster) > 1:
-                representative_word = max(cluster, key=len)
+            if len (cluster) > 1:
+                representative_word = max (cluster, key = len)
                 for mention in cluster:
-                    if mention.lower() != representative_word.lower():
-                        link = CorefLink(from_mention=mention, to_mention=representative_word)
-                        coreference_links.append(link)
+                    if mention.lower () != representative_word.lower ():
+                        coreference_links.append (
+                            CorefLink (
+                                from_mention = mention,
+                                to_mention = representative_word,
+                            )
+                        )
 
     # 2. extract claims
     raw_sentences = extract_claims (text_for_pipeline)
@@ -203,10 +207,10 @@ def analyze_pipeline (payload: AnalyzeRequest):
         else:
             atomic_claims = decompose (classified_item.text)
             for atomic_claim in atomic_claims:
-                found_passages = retrieve(atomic_claim, top_k=1)
+                found_passages = retrieve (atomic_claim, top_k = 1)
                 top_passage = None
-                if len(found_passages) > 0:
-                    top_passage = found_passages[0]
+                if len (found_passages) > 0:
+                    top_passage = found_passages [0]
 
                 verification_result = verify_claim (atomic_claim, top_passage)
 
@@ -260,9 +264,9 @@ def analyze_pipeline (payload: AnalyzeRequest):
     opinion_claims = []
     for claim_item in sub_claims:
         if claim_item.status == "Fact":
-            factual_claims.append(claim_item)
+            factual_claims.append (claim_item)
         elif claim_item.status == "Opinion":
-            opinion_claims.append(claim_item)
+            opinion_claims.append (claim_item)
 
     if len (factual_claims) == 0 and len (sub_claims) > 0:
         all_opinion = True
@@ -310,7 +314,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
     matched_words = []
     for word in hate_keywords:
         if word in lower_text:
-            matched_words.append(word)
+            matched_words.append (word)
 
     if len (matched_words) > 0:
         hate_response = HateSpeechResponse (
