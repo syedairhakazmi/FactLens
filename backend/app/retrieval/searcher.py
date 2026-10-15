@@ -17,6 +17,28 @@ _STOPWORDS = {
     "this", "that", "these", "those", "it", "its", "as", "by", "from",
 }
 
+_URDU_PUNCTUATION = string.punctuation + "،۔؟؛«»“”‘’"
+_URDU_STOPWORDS = {
+    "اور", "ہے", "ہیں", "کا", "کی", "کے", "کو", "سے", "میں", "پر", "تھا", "تھی", "تھے",
+    "یہ", "وہ", "نے", "بھی", "تو", "کہ", "کر", "ہو", "رہا", "رہی", "رہے", "کیا", "گے", "گی",
+    "ان", "اس", "ہی", "تک", "اب", "جب", "ہم", "آپ", "سب", "ایک", "دو", "تین",
+    "کل", "آج", "پہلے", "بعد", "دوران", "والا", "والی", "والے", "بارے", "لیے", "تمام",
+    "اگر", "مگر", "لیکن", "پھر", "کون", "کوئی", "کچھ", "اپنے", "اپنی", "اپنا",
+    "رنگ", "سال", "دن", "طرح", "طریقے", "ساتھ", "زیادہ", "کم", "بہت", "گیا", "گئی", "گئے",
+    "نامی", "طور", "وجہ", "شامل", "شروع", "ختم", "پیدا", "موجود", "والوں",
+}
+
+def _tokenize_urdu (text):
+    text = text.lower ()
+    for symbol in _URDU_PUNCTUATION:
+        text = text.replace (symbol, " ")
+    words = text.split ()
+    clean_words = []
+    for word in words:
+        if word not in _URDU_STOPWORDS:
+            clean_words.append (word)
+    return clean_words
+
 @dataclass
 class RetrievedPassage:
     text: str
@@ -101,7 +123,7 @@ def save_dataset_to_file (passages, file_path):
 
 class CorpusIndex:
     # index and search an evidence dataset using hybrid bm25 and embeddings
-    def __init__ (self, passages = None, cache_file_path = None):
+    def __init__ (self, passages = None, cache_file_path = None, tokenizer_func = None, use_embeddings = True):
         self.passages = []
         self.passage_texts = []
         self.passage_sources = []
@@ -111,6 +133,8 @@ class CorpusIndex:
         self.bm25_engine = None
         self.passage_vectors = None
         self.cache_file_path = cache_file_path
+        self.tokenizer_func = tokenizer_func or _tokenize
+        self.use_embeddings = use_embeddings
 
         if passages is not None and len (passages) > 0:
             self.build_index (passages)
@@ -140,7 +164,7 @@ class CorpusIndex:
             self.passage_sources.append (passage_source)
             self.passage_ids.append (passage_id)
             self.passage_titles.append (passage_title)
-            self.tokenized_passages.append (_tokenize (passage_text))
+            self.tokenized_passages.append (self.tokenizer_func (passage_text))
 
         # build bm25 index
         if len (self.tokenized_passages) > 0:
@@ -149,29 +173,32 @@ class CorpusIndex:
             self.bm25_engine = None
 
         # load or compute dense vectors
-        embedding_model = _get_embedding_model ()
-        if embedding_model is not None and len (self.passage_texts) > 0:
-            # check if cached vectors file exists on disk
-            if self.cache_file_path is not None and os.path.exists (self.cache_file_path):
-                try:
-                    loaded_vectors = np.load (self.cache_file_path)
-                    if len (loaded_vectors) == len (self.passage_texts):
-                        self.passage_vectors = loaded_vectors
-                    else:
-                        self.passage_vectors = None
-                except Exception:
-                    self.passage_vectors = None
-
-            if self.passage_vectors is None:
-                self.passage_vectors = embedding_model.encode (self.passage_texts)
-                if self.cache_file_path is not None:
+        if self.use_embeddings:
+            embedding_model = _get_embedding_model ()
+            if embedding_model is not None and len (self.passage_texts) > 0:
+                # check if cached vectors file exists on disk
+                if self.cache_file_path is not None and os.path.exists (self.cache_file_path):
                     try:
-                        cache_folder = os.path.dirname (self.cache_file_path)
-                        if len (cache_folder) > 0:
-                            os.makedirs (cache_folder, exist_ok = True)
-                        np.save (self.cache_file_path, self.passage_vectors)
+                        loaded_vectors = np.load (self.cache_file_path)
+                        if len (loaded_vectors) == len (self.passage_texts):
+                            self.passage_vectors = loaded_vectors
+                        else:
+                            self.passage_vectors = None
                     except Exception:
-                        pass
+                        self.passage_vectors = None
+
+                if self.passage_vectors is None:
+                    self.passage_vectors = embedding_model.encode (self.passage_texts)
+                    if self.cache_file_path is not None:
+                        try:
+                            cache_folder = os.path.dirname (self.cache_file_path)
+                            if len (cache_folder) > 0:
+                                os.makedirs (cache_folder, exist_ok = True)
+                            np.save (self.cache_file_path, self.passage_vectors)
+                        except Exception:
+                            pass
+            else:
+                self.passage_vectors = None
         else:
             self.passage_vectors = None
 
@@ -183,7 +210,7 @@ class CorpusIndex:
 
         # 1. keyword scores from bm25
         if self.bm25_engine is not None:
-            query_words = _tokenize (query)
+            query_words = self.tokenizer_func (query)
             raw_bm25_scores = np.array (self.bm25_engine.get_scores (query_words))
             normalized_bm25_scores = _min_max_normalize (raw_bm25_scores)
         else:
@@ -191,21 +218,26 @@ class CorpusIndex:
             normalized_bm25_scores = np.zeros (total_items)
 
         # 2. dense meaning scores from embeddings
-        embedding_model = _get_embedding_model ()
-        if embedding_model is not None and self.passage_vectors is not None:
-            # bge models need a special prefix on queries for best results
-            query_with_prefix = _BGE_QUERY_PREFIX + query
-            query_vector = embedding_model.encode ([query_with_prefix]) [0]
+        if self.passage_vectors is not None:
+            embedding_model = _get_embedding_model ()
+            if embedding_model is not None:
+                # bge models need a special prefix on queries for best results
+                query_with_prefix = _BGE_QUERY_PREFIX + query
+                query_vector = embedding_model.encode ([query_with_prefix]) [0]
 
-            similarity_scores = []
-            for passage_vector in self.passage_vectors:
-                dot_product = np.dot (query_vector, passage_vector)
-                length_product = np.linalg.norm (query_vector) * np.linalg.norm (passage_vector) + 1e-8
-                similarity_scores.append (dot_product / length_product)
+                similarity_scores = []
+                for passage_vector in self.passage_vectors:
+                    dot_product = np.dot (query_vector, passage_vector)
+                    length_product = np.linalg.norm (query_vector) * np.linalg.norm (passage_vector) + 1e-8
+                    similarity_scores.append (dot_product / length_product)
 
-            raw_embedding_scores = np.array (similarity_scores)
-            normalized_embedding_scores = _min_max_normalize (raw_embedding_scores)
-            embedding_weight = RETRIEVAL_WEIGHT_EMBEDDING
+                raw_embedding_scores = np.array (similarity_scores)
+                normalized_embedding_scores = _min_max_normalize (raw_embedding_scores)
+                embedding_weight = RETRIEVAL_WEIGHT_EMBEDDING
+            else:
+                raw_embedding_scores = np.zeros (total_items)
+                normalized_embedding_scores = np.zeros (total_items)
+                embedding_weight = 0.0
         else:
             raw_embedding_scores = np.zeros (total_items)
             normalized_embedding_scores = np.zeros (total_items)
@@ -235,9 +267,11 @@ class CorpusIndex:
 
 _DEFAULT_DATASET_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus.jsonl")
 _FULL_DATASET_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_full.jsonl")
+_URDU_DATASET_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_urdu.jsonl")
 _DEFAULT_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_embeddings.npy")
 _FULL_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_full_embeddings.npy")
 _GLOBAL_INDEX = None
+_URDU_INDEX = None
 
 def get_global_index ():
     # use full local corpus if its cache exists or if explicitly requested, otherwise use default dataset corpus
@@ -255,6 +289,15 @@ def get_global_index ():
         _GLOBAL_INDEX = CorpusIndex (loaded_passages, cache_file_path = cache_path)
     return _GLOBAL_INDEX
 
+def get_urdu_index ():
+    # index the unified urdu corpus using urdu tokenization
+    global _URDU_INDEX
+    if _URDU_INDEX is None:
+        urdu_path = os.path.abspath (_URDU_DATASET_FILE)
+        loaded_passages = load_dataset_from_file (urdu_path)
+        _URDU_INDEX = CorpusIndex (loaded_passages, tokenizer_func = _tokenize_urdu, use_embeddings = False)
+    return _URDU_INDEX
+
 def retrieve (query, corpus = None, top_k = 3):
     # retrieve most relevant passages for a query
     if corpus is not None:
@@ -265,6 +308,43 @@ def retrieve (query, corpus = None, top_k = 3):
     # otherwise use the loaded dataset index
     dataset_index = get_global_index ()
     return dataset_index.search (query, top_k = top_k)
+
+def retrieve_urdu (query, top_k = 3):
+    # retrieve most relevant passages from the dedicated urdu corpus
+    urdu_index = get_urdu_index ()
+    return urdu_index.search (query, top_k = top_k)
+
+def is_topical_urdu_hit (query_urdu, passage_text, bm25_score, min_score = 15.0):
+    # check if an urdu retrieved passage is a genuine topical match
+    if bm25_score < min_score:
+        return False
+    if passage_text is None or len (passage_text.strip ()) == 0:
+        return False
+
+    query_tokens = _tokenize_urdu (query_urdu)
+    content_tokens = []
+    for token in query_tokens:
+        if len (token) >= 2:
+            content_tokens.append (token)
+
+    if len (content_tokens) == 0:
+        return False
+
+    passage_text_lower = passage_text.lower ()
+    matching_tokens = []
+    for token in content_tokens:
+        if token in passage_text_lower:
+            matching_tokens.append (token)
+
+    if len (content_tokens) <= 2:
+        return len (matching_tokens) >= len (content_tokens)
+
+    # require at least 50% of content words to appear in evidence passage
+    needed_matches = int ((len (content_tokens) + 1) / 2)
+    if needed_matches < 2:
+        needed_matches = 2
+
+    return len (matching_tokens) >= needed_matches
 
 def load_scifact_corpus (corpus_file_path):
     # load scifact corpus (actual scientific abstracts as evidence passages)

@@ -8,6 +8,8 @@ __pycache__/
 # not meant to be committed to the repo
 *.jsonl
 !backend/data/corpus.jsonl
+!backend/data/corpus_urdu.jsonl
+!backend/data/corpus_unified.jsonl
 *.npy
 *.arrow
 datasets_cache/

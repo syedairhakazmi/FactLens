@@ -141,3 +141,26 @@ def test_merge_removes_duplicates (tmp_path):
         texts.append (p ["text"].lower ())
     duplicate_count = texts.count ("duplicate claim here.")
     assert duplicate_count == 1
+
+def test_retrieve_urdu_matches_relevant_passage ():
+    from app.retrieval.searcher import retrieve_urdu
+    # test retrieval on known urdu queries from corpus_urdu
+    results = retrieve_urdu ("چاند پر اترنے والا پہلا جانور", top_k = 1)
+    assert len (results) > 0
+    assert results [0].bm25_score > 10.0
+    assert "چاند" in results [0].text or "جانور" in results [0].text
+
+def test_is_topical_urdu_hit_accepts_and_rejects ():
+    from app.retrieval.searcher import is_topical_urdu_hit
+    # genuine match should return True
+    query = "ایفل ٹاور 1889 میں تعمیر کیا گیا تھا"
+    passage = "ایفل ٹاور کی تعمیر میں صرف دو سال (1887-1889) لگے"
+    assert is_topical_urdu_hit (query, passage, bm25_score = 62.0) is True
+
+    # unrelated passage with only coincidental number or stopword should return False
+    unrelated_passage = "کولمبیا کی بلدیہ کس سال قائم کی گئی تھی؟ 1600"
+    query_unrelated = "شیکسپیئر نے ہیملیٹ 1600 کے قریب لکھا تھا"
+    assert is_topical_urdu_hit (query_unrelated, unrelated_passage, bm25_score = 30.0) is False
+
+    # low bm25 score should return False
+    assert is_topical_urdu_hit (query, passage, bm25_score = 5.0) is False

@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +7,7 @@ from pydantic import BaseModel
 from app.claims.detector import extract_claims
 from app.coreference.resolver import resolve
 from app.decomposition import decompose
-from app.retrieval.searcher import retrieve
+from app.retrieval.searcher import retrieve, retrieve_urdu, is_topical_urdu_hit, RetrievedPassage
 from app.verification.verifier import verify_claim
 from app.translation.translator import is_urdu, translate_ur_to_en, translate_en_to_ur, get_urdu_verdict, get_urdu_reason
 
@@ -145,10 +146,18 @@ def analyze_pipeline (payload: AnalyzeRequest):
         input_language = "ur"
         text_for_pipeline = translate_ur_to_en (raw_text)
         original_text_en = text_for_pipeline
+        # split raw urdu text into sentences for direct indexing
+        split_urdu_sentences = re.split (r"[۔\n\.\?؟]+", raw_text)
+        urdu_sentences = []
+        for urdu_part in split_urdu_sentences:
+            cleaned_part = urdu_part.strip ()
+            if len (cleaned_part) > 0:
+                urdu_sentences.append (cleaned_part)
     else:
         input_language = "en"
         text_for_pipeline = raw_text
         original_text_en = None
+        urdu_sentences = []
 
     # 1. coreference resolution
     coreference_result = resolve (text_for_pipeline)
@@ -179,6 +188,14 @@ def analyze_pipeline (payload: AnalyzeRequest):
         raw_sentence_text = classified_item.text
         if sentence_index < len (raw_sentences):
             raw_sentence_text = raw_sentences [sentence_index].text
+
+        current_urdu_sentence = ""
+        if input_is_urdu:
+            if sentence_index < len (urdu_sentences):
+                current_urdu_sentence = urdu_sentences [sentence_index]
+            else:
+                current_urdu_sentence = translate_en_to_ur (raw_sentence_text)
+
         sentence_index = sentence_index + 1
 
         is_coref_modified = False
@@ -207,7 +224,38 @@ def analyze_pipeline (payload: AnalyzeRequest):
         else:
             atomic_claims = decompose (classified_item.text)
             for atomic_claim in atomic_claims:
-                found_passages = retrieve (atomic_claim, top_k = 1)
+                # 3a. If input is Urdu, check native Urdu corpus first
+                found_passages = []
+                used_urdu_corpus = False
+                native_urdu_passage = None
+
+                if input_is_urdu:
+                    urdu_search_query = current_urdu_sentence
+                    if len (urdu_search_query) == 0:
+                        urdu_search_query = translate_en_to_ur (atomic_claim)
+
+                    urdu_matches = retrieve_urdu (urdu_search_query, top_k = 1)
+                    if len (urdu_matches) > 0:
+                        candidate_passage = urdu_matches [0]
+                        if is_topical_urdu_hit (urdu_search_query, candidate_passage.text, candidate_passage.bm25_score):
+                            native_urdu_passage = candidate_passage
+                            used_urdu_corpus = True
+                            en_evidence = translate_ur_to_en (native_urdu_passage.text)
+                            found_passages = [
+                                RetrievedPassage (
+                                    text = en_evidence,
+                                    source = native_urdu_passage.source,
+                                    bm25_score = native_urdu_passage.bm25_score,
+                                    embedding_score = 0.85,
+                                    combined_score = 0.85,
+                                    title = native_urdu_passage.title,
+                                )
+                            ]
+
+                # 3b. Fallback to English multi-benchmark corpus if not found in Urdu corpus
+                if len (found_passages) == 0:
+                    found_passages = retrieve (atomic_claim, top_k = 1)
+
                 top_passage = None
                 if len (found_passages) > 0:
                     top_passage = found_passages [0]
@@ -231,13 +279,19 @@ def analyze_pipeline (payload: AnalyzeRequest):
                 status_ur_val = None
                 reason_ur_val = None
                 evidence_ur_val = None
+                source_display = verification_result.evidence_source
+
                 if input_is_urdu:
                     sub_text_ur = translate_en_to_ur (claim_display_text)
                     verdict_ur_val = get_urdu_verdict (verification_result.verdict)
                     status_ur_val = get_urdu_verdict ("Fact")
                     reason_ur_val = get_urdu_reason (verification_result.reason)
-                    if verification_result.evidence_text is not None:
+                    if used_urdu_corpus and native_urdu_passage is not None:
+                        evidence_ur_val = native_urdu_passage.text
+                        source_display = f"{native_urdu_passage.source} (مقامی اردو ڈیٹا بیس)"
+                    elif verification_result.evidence_text is not None:
                         evidence_ur_val = translate_en_to_ur (verification_result.evidence_text)
+                        source_display = f"{verification_result.evidence_source} (کثیر النسلی ڈیٹا بیس - ترجمہ شدہ)"
 
                 sub_claims.append (
                     SubClaimResult (
@@ -251,7 +305,7 @@ def analyze_pipeline (payload: AnalyzeRequest):
                         confidence = verification_result.confidence,
                         evidence = verification_result.evidence_text,
                         evidence_ur = evidence_ur_val,
-                        source = verification_result.evidence_source,
+                        source = source_display,
                         reason = verification_result.reason,
                         reason_ur = reason_ur_val,
                         bm25_score = bm25_value,
