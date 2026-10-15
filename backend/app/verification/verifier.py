@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from dataclasses import dataclass
 from functools import lru_cache
 import numpy as np
@@ -15,7 +16,7 @@ except Exception:
 @dataclass
 class VerificationResult:
     verdict: str
-    confidence: int
+    confidence: Optional [int]
     evidence_text: str
     evidence_source: str
     reason: str
@@ -185,7 +186,7 @@ def verify_claim (claim_text, top_passage = None):
     if top_passage is None or len (top_passage.text.strip ()) == 0:
         return VerificationResult (
             verdict = "Not Enough Evidence",
-            confidence = 40,
+            confidence = None,
             evidence_text = "No candidate evidence passages found in the corpus.",
             evidence_source = "Corpus Search (Empty)",
             reason = "Retriever returned zero candidate documents for this claim.",
@@ -198,7 +199,7 @@ def verify_claim (claim_text, top_passage = None):
     if retrieval_score < 0.15:
         return VerificationResult (
             verdict = "Not Enough Evidence",
-            confidence = 40,
+            confidence = None,
             evidence_text = "No relevant facts or records found across the benchmark datasets for this claim.",
             evidence_source = "All Datasets (No match found)",
             reason = "Retrieved candidate scored below the minimum relevance threshold across all indexed corpora.",
@@ -206,15 +207,9 @@ def verify_claim (claim_text, top_passage = None):
 
     # gate low combined score or low semantic embedding similarity (< 0.52)
     if retrieval_score < 0.35 or embedding_score < 0.52:
-        calibrated_confidence = int (retrieval_score * 100 + 15)
-        if calibrated_confidence < 45:
-            calibrated_confidence = 45
-        elif calibrated_confidence > 65:
-            calibrated_confidence = 65
-
         return VerificationResult (
             verdict = "Not Enough Evidence",
-            confidence = calibrated_confidence,
+            confidence = None,
             evidence_text = "No verifiable evidence found across the benchmark datasets to substantiate or disprove this claim.",
             evidence_source = "All Datasets (No relevant match)",
             reason = "Searched across SciFact, FEVER, AVeriTeC, and FEVEROUS, but no dataset contains relevant records for this claim.",
@@ -258,7 +253,7 @@ def verify_claim (claim_text, top_passage = None):
                 if not _can_evidence_refute (claim_text, top_passage.text):
                     return VerificationResult (
                         verdict = "Not Enough Evidence",
-                        confidence = 65,
+                        confidence = None,
                         evidence_text = "No verifiable evidence found across the benchmark datasets to substantiate or disprove this claim.",
                         evidence_source = "All Datasets (No relevant match)",
                         reason = "Retrieved candidate passage does not contain the entities or topic needed to evaluate the claim.",

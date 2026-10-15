@@ -77,9 +77,9 @@ def test_verify_weak_evidence_returns_not_enough_evidence ():
     )
     result = verify_claim (claim, passage)
     assert result.verdict == "Not Enough Evidence"
-    assert result.confidence <= 65
+    assert result.confidence is None
 
 def test_verify_none_passage_returns_not_enough_evidence ():
     result = verify_claim ("Any random claim", None)
     assert result.verdict == "Not Enough Evidence"
-    assert result.confidence == 40
+    assert result.confidence is None

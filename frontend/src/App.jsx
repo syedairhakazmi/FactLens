@@ -872,12 +872,19 @@ function SubClaimCard({ claim, index }) {
                 </div>
               )}
               {claim.note && <p className="text-xs italic mb-2.5" style={{ color: C.inkFaint, fontFamily: BODY }}>{claim.note}</p>}
-              <div className="flex items-center gap-2 mb-2.5">
-                <div className="h-2 flex-1 rounded-full overflow-hidden" style={{ backgroundColor: C.paperSoft }}>
-                  <div className="h-full rounded-full" style={{ width: `${claim.confidence}%`, backgroundColor: color, transition: "width 0.6s cubic-bezier(.2,.8,.2,1)" }} />
+              {claim.confidence != null ? (
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="h-2 flex-1 rounded-full overflow-hidden" style={{ backgroundColor: C.paperSoft }}>
+                    <div className="h-full rounded-full" style={{ width: `${claim.confidence}%`, backgroundColor: color, transition: "width 0.6s cubic-bezier(.2,.8,.2,1)" }} />
+                  </div>
+                  <span className="text-xs font-medium w-9 text-right" style={{ color: C.inkSoft, fontFamily: MONO }}>{claim.confidence}%</span>
                 </div>
-                <span className="text-xs font-medium w-9 text-right" style={{ color: C.inkSoft, fontFamily: MONO }}>{claim.confidence}%</span>
-              </div>
+              ) : claim.verdict === "Not Enough Evidence" ? (
+                <div className="flex items-center gap-2 mb-2.5 px-3 py-2 rounded-lg" style={{ backgroundColor: C.highlightSoft, border: `1.5px dashed #D4A017` }}>
+                  <HelpCircle className="w-4 h-4 shrink-0" style={{ color: "#8A6A00" }} />
+                  <span className="text-xs font-semibold" style={{ color: "#8A6A00", fontFamily: BODY }}>Insufficient Evidence — no reliable score can be assigned</span>
+                </div>
+              ) : null}
               <p className="text-sm leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }} dir={isUrdu ? "rtl" : "ltr"}>{claim.evidence}</p>
               {isUrdu && claim.evidenceEn && claim.evidenceEn !== claim.evidence && (
                 <p className="text-xs italic mt-1 text-gray-500" style={{ fontFamily: BODY }}>
