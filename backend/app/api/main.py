@@ -10,7 +10,11 @@ from app.retrieval.searcher import retrieve
 from app.verification.verifier import verify_claim
 from app.translation.translator import is_urdu, translate_ur_to_en, translate_en_to_ur, get_urdu_verdict, get_urdu_reason
 
-app = FastAPI (title = "FactLens API", version = "1.0.0")
+app = FastAPI (
+    title = "FactLens API",
+    description = "Bilingual Automated Fact-Checking and Contextual Harm Detection Pipeline",
+    version = "1.0.0",
+)
 
 app.add_middleware (
     CORSMiddleware,
@@ -129,7 +133,12 @@ class FullPipelineResponse (BaseModel):
 
 @app.get ("/api/health")
 def health_check ():
-    return {"status": "ok", "service": "FactLens API"}
+    return {
+        "status": "ok",
+        "service": "FactLens API",
+        "version": "1.0.0",
+        "milestone": "Mid-1 Evaluation",
+    }
 
 @app.post ("/api/analyze", response_model = FullPipelineResponse)
 def analyze_pipeline (payload: AnalyzeRequest):
