@@ -918,7 +918,7 @@ function TechDetails({ data, isHate = false }) {
         ["Coreference model", "LingMessCoref (Longformer-based coreference resolution)"],
         ["Evidence retrieval", "Hybrid search: BM25Plus lexical match + BAAI/bge-base-en-v1.5 dense retrieval"],
         ["Verification engine", "DeBERTa-v3 NLI cross-encoder (cross-encoder/nli-deberta-v3-small)"],
-        ["Evidence sources", "Unified multi-benchmark corpus (SciFact, FEVER 2018, FEVER 2.0, FEVEROUS, AVeriTeC)"],
+        ["Evidence sources", isUrdu ? "Unified multi-benchmark & regional Urdu corpus (Urdu-News-Augmented, UrduFactCheck, ULNC, Ax-to-Grind-Urdu, FEVER, SciFact, AVeriTeC)" : "Unified multi-benchmark corpus (SciFact, FEVER 2018, FEVER 2.0, FEVEROUS, AVeriTeC)"],
       ];
   return (
     <div className="flex flex-col gap-2.5">
