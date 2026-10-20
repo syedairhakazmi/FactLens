@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.claims.detector import extract_claims
 from app.coreference.resolver import resolve
 from app.decomposition import decompose
-from app.retrieval.searcher import retrieve
+from app.retrieval.searcher import retrieve, RetrievedPassage
 from app.verification.verifier import verify_claim
 from app.translation.translator import is_urdu, translate_ur_to_en, translate_en_to_ur, get_urdu_verdict, get_urdu_reason
 
@@ -216,17 +216,39 @@ def analyze_pipeline (payload: AnalyzeRequest):
         else:
             atomic_claims = decompose (classified_item.text)
             for atomic_claim in atomic_claims:
-                found_passages = retrieve (atomic_claim, top_k = 1)
                 top_passage = None
-                if len (found_passages) > 0:
-                    top_passage = found_passages [0]
 
-                if input_is_urdu and (top_passage is None or top_passage.combined_score < 0.25):
+                if input_is_urdu:
                     urdu_passages = retrieve (raw_text, top_k = 1, lang = "ur")
                     if len (urdu_passages) > 0 and urdu_passages [0].combined_score > 0.05:
                         top_passage = urdu_passages [0]
 
-                verification_result = verify_claim (atomic_claim, top_passage)
+                if top_passage is None:
+                    found_passages = retrieve (atomic_claim, top_k = 1)
+                    if len (found_passages) > 0:
+                        top_passage = found_passages [0]
+
+                evidence_ur_val = None
+                if top_passage is not None:
+                    if is_urdu (top_passage.text):
+                        passage_en = translate_ur_to_en (top_passage.text)
+                        passage_for_verify = RetrievedPassage (
+                            text = passage_en,
+                            source = top_passage.source,
+                            bm25_score = top_passage.bm25_score,
+                            embedding_score = top_passage.embedding_score,
+                            combined_score = top_passage.combined_score,
+                            passage_id = top_passage.passage_id,
+                            title = top_passage.title,
+                        )
+                        verification_result = verify_claim (atomic_claim, passage_for_verify)
+                        evidence_ur_val = top_passage.text
+                    else:
+                        verification_result = verify_claim (atomic_claim, top_passage)
+                        if input_is_urdu and verification_result.evidence_text is not None:
+                            evidence_ur_val = translate_en_to_ur (verification_result.evidence_text)
+                else:
+                    verification_result = verify_claim (atomic_claim, None)
 
                 claim_display_text = atomic_claim
                 resolved_value = None
@@ -244,14 +266,11 @@ def analyze_pipeline (payload: AnalyzeRequest):
                 verdict_ur_val = None
                 status_ur_val = None
                 reason_ur_val = None
-                evidence_ur_val = None
                 if input_is_urdu:
                     sub_text_ur = translate_en_to_ur (claim_display_text)
                     verdict_ur_val = get_urdu_verdict (verification_result.verdict)
                     status_ur_val = get_urdu_verdict ("Fact")
                     reason_ur_val = get_urdu_reason (verification_result.reason)
-                    if verification_result.evidence_text is not None:
-                        evidence_ur_val = translate_en_to_ur (verification_result.evidence_text)
 
                 sub_claims.append (
                     SubClaimResult (
