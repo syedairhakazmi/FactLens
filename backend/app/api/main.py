@@ -221,6 +221,11 @@ def analyze_pipeline (payload: AnalyzeRequest):
                 if len (found_passages) > 0:
                     top_passage = found_passages [0]
 
+                if input_is_urdu and (top_passage is None or top_passage.combined_score < 0.25):
+                    urdu_passages = retrieve (raw_text, top_k = 1, lang = "ur")
+                    if len (urdu_passages) > 0 and urdu_passages [0].combined_score > 0.05:
+                        top_passage = urdu_passages [0]
+
                 verification_result = verify_claim (atomic_claim, top_passage)
 
                 claim_display_text = atomic_claim
