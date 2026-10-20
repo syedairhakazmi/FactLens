@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import numpy as np
 from rank_bm25 import BM25Plus
+from app.retrieval.urdu_preprocessor import tokenize_urdu, normalize_urdu_text
 
 RETRIEVAL_WEIGHT_EMBEDDING = 0.5
 
@@ -101,7 +102,9 @@ def save_dataset_to_file (passages, file_path):
 
 class CorpusIndex:
     # index and search an evidence dataset using hybrid bm25 and embeddings
-    def __init__ (self, passages = None, cache_file_path = None):
+    def __init__ (self, passages = None, cache_file_path = None, is_urdu_corpus = False):
+        self.is_urdu_corpus = is_urdu_corpus
+        self.tokenize_fn = tokenize_urdu if is_urdu_corpus else _tokenize
         self.passages = []
         self.passage_texts = []
         self.passage_sources = []
@@ -140,7 +143,7 @@ class CorpusIndex:
             self.passage_sources.append (passage_source)
             self.passage_ids.append (passage_id)
             self.passage_titles.append (passage_title)
-            self.tokenized_passages.append (_tokenize (passage_text))
+            self.tokenized_passages.append (self.tokenize_fn (passage_text))
 
         # build bm25 index
         if len (self.tokenized_passages) > 0:
@@ -183,7 +186,7 @@ class CorpusIndex:
 
         # 1. keyword scores from bm25
         if self.bm25_engine is not None:
-            query_words = _tokenize (query)
+            query_words = self.tokenize_fn (query)
             raw_bm25_scores = np.array (self.bm25_engine.get_scores (query_words))
             normalized_bm25_scores = _min_max_normalize (raw_bm25_scores)
         else:
@@ -239,6 +242,11 @@ _DEFAULT_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "dat
 _FULL_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_full_embeddings.npy")
 _GLOBAL_INDEX = None
 
+_URDU_SAMPLE_DATASET_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_urdu_sample.jsonl")
+_URDU_FULL_DATASET_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_urdu.jsonl")
+_URDU_CACHE_FILE = os.path.join (os.path.dirname (__file__), "..", "..", "data", "corpus_urdu_embeddings.npy")
+_GLOBAL_URDU_INDEX = None
+
 def get_global_index ():
     # use full local corpus if its cache exists or if explicitly requested, otherwise use default dataset corpus
     global _GLOBAL_INDEX
@@ -252,17 +260,54 @@ def get_global_index ():
             dataset_path = os.path.abspath (_DEFAULT_DATASET_FILE)
             cache_path = os.path.abspath (_DEFAULT_CACHE_FILE)
         loaded_passages = load_dataset_from_file (dataset_path)
-        _GLOBAL_INDEX = CorpusIndex (loaded_passages, cache_file_path = cache_path)
+        _GLOBAL_INDEX = CorpusIndex (loaded_passages, cache_file_path = cache_path, is_urdu_corpus = False)
     return _GLOBAL_INDEX
 
-def retrieve (query, corpus = None, top_k = 3):
-    # retrieve most relevant passages for a query
+def get_urdu_index ():
+    # get or build index over the synthesized urdu knowledge corpus
+    global _GLOBAL_URDU_INDEX
+    if _GLOBAL_URDU_INDEX is None:
+        full_path = os.path.abspath (_URDU_FULL_DATASET_FILE)
+        sample_path = os.path.abspath (_URDU_SAMPLE_DATASET_FILE)
+        use_full = os.environ.get ("FACTLENS_USE_FULL_URDU_CORPUS", "0") == "1"
+        if use_full and os.path.exists (full_path):
+            dataset_path = full_path
+        elif os.path.exists (sample_path):
+            dataset_path = sample_path
+        elif os.path.exists (full_path):
+            dataset_path = full_path
+        else:
+            return None
+        loaded_passages = load_dataset_from_file (dataset_path)
+        _GLOBAL_URDU_INDEX = CorpusIndex (
+            loaded_passages,
+            cache_file_path = os.path.abspath (_URDU_CACHE_FILE),
+            is_urdu_corpus = True,
+        )
+    return _GLOBAL_URDU_INDEX
+
+def retrieve (query, corpus = None, top_k = 3, lang = None):
+    # retrieve most relevant passages for a query (supports English and Urdu natively)
+    try:
+        from app.translation.translator import is_urdu
+        query_is_urdu = (lang == "ur") or is_urdu (query)
+    except Exception:
+        query_is_urdu = (lang == "ur")
+
     if corpus is not None:
         # if a specific corpus is provided, index and search it
-        custom_index = CorpusIndex (corpus)
+        custom_index = CorpusIndex (corpus, is_urdu_corpus = query_is_urdu)
         return custom_index.search (query, top_k = top_k)
 
-    # otherwise use the loaded dataset index
+    # if query is in Urdu, retrieve from the synthesized Urdu knowledge base
+    if query_is_urdu:
+        urdu_index = get_urdu_index ()
+        if urdu_index is not None:
+            urdu_results = urdu_index.search (query, top_k = top_k)
+            if len (urdu_results) > 0 and urdu_results [0].combined_score > 0.02:
+                return urdu_results
+
+    # default english retrieval
     dataset_index = get_global_index ()
     return dataset_index.search (query, top_k = top_k)
 
