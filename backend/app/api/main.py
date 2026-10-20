@@ -217,38 +217,38 @@ def analyze_pipeline (payload: AnalyzeRequest):
             atomic_claims = decompose (classified_item.text)
             for atomic_claim in atomic_claims:
                 top_passage = None
+                evidence_ur_val = None
+                verification_result = None
 
                 if input_is_urdu:
                     urdu_passages = retrieve (raw_text, top_k = 1, lang = "ur")
                     if len (urdu_passages) > 0 and urdu_passages [0].combined_score > 0.05:
-                        top_passage = urdu_passages [0]
+                        candidate_passage = urdu_passages [0]
+                        passage_en = translate_ur_to_en (candidate_passage.text)
+                        passage_for_verify = RetrievedPassage (
+                            text = passage_en,
+                            source = candidate_passage.source,
+                            bm25_score = candidate_passage.bm25_score,
+                            embedding_score = candidate_passage.embedding_score,
+                            combined_score = candidate_passage.combined_score,
+                            passage_id = candidate_passage.passage_id,
+                            title = candidate_passage.title,
+                        )
+                        v_result = verify_claim (atomic_claim, passage_for_verify)
+                        if v_result.verdict != "Not Enough Evidence":
+                            top_passage = candidate_passage
+                            verification_result = v_result
+                            evidence_ur_val = candidate_passage.text
 
                 if top_passage is None:
                     found_passages = retrieve (atomic_claim, top_k = 1)
                     if len (found_passages) > 0:
                         top_passage = found_passages [0]
-
-                evidence_ur_val = None
-                if top_passage is not None:
-                    if is_urdu (top_passage.text):
-                        passage_en = translate_ur_to_en (top_passage.text)
-                        passage_for_verify = RetrievedPassage (
-                            text = passage_en,
-                            source = top_passage.source,
-                            bm25_score = top_passage.bm25_score,
-                            embedding_score = top_passage.embedding_score,
-                            combined_score = top_passage.combined_score,
-                            passage_id = top_passage.passage_id,
-                            title = top_passage.title,
-                        )
-                        verification_result = verify_claim (atomic_claim, passage_for_verify)
-                        evidence_ur_val = top_passage.text
-                    else:
                         verification_result = verify_claim (atomic_claim, top_passage)
                         if input_is_urdu and verification_result.evidence_text is not None:
                             evidence_ur_val = translate_en_to_ur (verification_result.evidence_text)
-                else:
-                    verification_result = verify_claim (atomic_claim, None)
+                    else:
+                        verification_result = verify_claim (atomic_claim, None)
 
                 claim_display_text = atomic_claim
                 resolved_value = None
