@@ -4,7 +4,7 @@ import {
   CheckCircle2, XCircle, HelpCircle, ArrowLeft, Loader2,
   FileText, AlertTriangle, Globe2, Database, ArrowUpRight, Sparkles,
   ArrowRight, Settings2, Link2, RefreshCw, MessageSquare, Copy, Check,
-  Command
+  Command, Mic, Upload, Volume2, Square, Radio
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -49,6 +49,16 @@ const DISPLAY = '"Syne", "Segoe UI", sans-serif';
 const BODY = '"DM Sans", "Segoe UI", sans-serif';
 const MONO = '"DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
 
+// Helper to resolve backend API URL dynamically:
+// Works seamlessly on desktop (localhost) and mobile phones on the local LAN (e.g. http://192.168.18.16:8000)
+function getApiBase() {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== "undefined" && window.location && window.location.hostname) {
+    return `http://${window.location.hostname}:8000`;
+  }
+  return "http://localhost:8000";
+}
+
 // ---------------------------------------------------------------------------
 // GLOBAL STYLE
 // ---------------------------------------------------------------------------
@@ -60,10 +70,6 @@ function GlobalStyle() {
 
       * { -webkit-tap-highlight-color: transparent; }
       ::selection { background-color: ${C.highlight}; color: ${C.ink}; }
-
-      @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
-      }
 
       @keyframes flDrift {
         0%   { transform: translate(0px, 0px) rotate(var(--rot, 0deg)); }
@@ -596,13 +602,369 @@ function Toast({ message, onDone }) {
 // ---------------------------------------------------------------------------
 
 const CATEGORY_COLOR = { factcheck: C.info, hatespeech: C.brand };
-const MAX_CHARS = 600;
+const MAX_CHARS = 3000;
 
-function InputScreen({ text, setText, onAnalyze, shakeKey }) {
+function BackendStatusBar({ status, onRetry }) {
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const command = "uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload";
+
+  const handleCopy = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(command);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (status === "online") {
+    return (
+      <div className="mb-6 p-2.5 sm:p-3 rounded-xl bg-emerald-50/95 border border-emerald-300 text-emerald-900 flex items-center justify-between gap-2 shadow-xs fl-fade-up">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+          <span className="text-xs font-semibold truncate" style={{ fontFamily: BODY }}>
+            <strong>Live Neural Backend Connected:</strong> FastAPI • Faster-Whisper ASR • DeBERTa-v3 NLI active
+          </span>
+        </div>
+        <span className="text-[10px] font-mono uppercase bg-emerald-200/70 text-emerald-900 px-2 py-0.5 rounded font-bold shrink-0">
+          Live 8000
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="mb-6 rounded-2xl p-4 sm:p-5 border-2 shadow-sm fl-fade-up"
+      style={{
+        backgroundColor: "#FFFDF5",
+        borderColor: "#F59E0B",
+        boxShadow: `4px 4px 0 ${C.line}`,
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0 text-amber-700 mt-0.5">
+          <AlertTriangle className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs sm:text-sm font-bold text-amber-950 uppercase tracking-wide" style={{ fontFamily: DISPLAY }}>
+              Backend Offline • Standalone Interactive Mode Active
+            </h4>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setExpanded(!expanded)}
+                className="text-[11px] font-bold text-amber-900 underline hover:text-amber-700"
+              >
+                {expanded ? "Hide instructions ▲" : "How to run backend ▼"}
+              </button>
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-200/80 hover:bg-amber-300 text-amber-950 transition-colors shadow-2xs"
+                title="Ping backend server on port 8000"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Retry 8000</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-amber-900/90 mt-1.5 leading-relaxed" style={{ fontFamily: BODY }}>
+            ✨ <strong>Everything is functional below!</strong> You can use <strong>Live Mic</strong> speech input, tap sample claims, and verify evidence right now on your phone. To connect your laptop's local Faster-Whisper GPU models, run the backend:
+          </p>
+
+          {expanded && (
+            <div className="mt-3 fl-expand">
+              <div className="flex items-center justify-between gap-2 bg-slate-900 text-slate-100 px-3 py-2 rounded-lg font-mono text-[11px] overflow-x-auto shadow-inner">
+                <code className="text-amber-300 select-all whitespace-nowrap">{command}</code>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="shrink-0 text-slate-400 hover:text-white p-1 rounded transition-colors"
+                  title="Copy launch command"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <p className="text-[10px] font-mono text-amber-800 mt-1.5">
+                Run inside <code className="font-bold">factlens_repo_starter/backend</code> in PowerShell or terminal.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InputScreen({
+  text,
+  setText,
+  onAnalyze,
+  shakeKey,
+  deviceCount = 1,
+  onSyncText,
+  backendStatus = "checking",
+  backendInfo = null,
+  onRetryBackend,
+  onShowOfflineModal
+}) {
   const [mouse, setMouse] = useState(null);
   const heroRef = useRef(null);
+  const fileInputRef = useRef(null);
   const pct = Math.min(100, (text.length / MAX_CHARS) * 100);
   const nearLimit = text.length > MAX_CHARS * 0.85;
+
+  // Live Audio Speech Recognition State
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioLang, setAudioLang] = useState("auto"); // "auto", "en-US", "ur-PK"
+  const [audioStatus, setAudioStatus] = useState("");
+  const [uploadedAudioName, setUploadedAudioName] = useState(null);
+
+  // Neural Whisper Recording Engine:
+  // Using MediaRecorder -> Faster-Whisper on backend for BOTH English and Urdu.
+  // This completely eliminates the browser Web Speech API bug where English words
+  // stutter and repeat ("Parisparisparis isparis is theparis...").
+  const isRecordingRef = useRef(false);
+  const baseTextRef = useRef("");
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  // Start MediaRecorder for high-fidelity audio capture (English & Urdu)
+  const startMediaRecorder = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+        if (audioBlob.size < 1000) {
+          setAudioStatus("Recording was too short. Please speak clearly and try again.");
+          return;
+        }
+
+        const isUrdu = audioLang === "ur-PK";
+        const targetLang = isUrdu ? "ur" : "en";
+        const filename = isUrdu ? "live_mic_urdu.wav" : "live_mic_english.wav";
+
+        setAudioStatus(
+          isUrdu
+            ? "Transcribing Urdu recording via Faster-Whisper..."
+            : "Transcribing English recording via Faster-Whisper..."
+        );
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const base64Audio = String(reader.result).split(",")[1];
+            const API_BASE = getApiBase();
+            const resp = await fetch(`${API_BASE}/api/transcribe`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                filename: filename,
+                language: targetLang,
+                audio_base64: base64Audio,
+              }),
+            });
+
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.transcription && data.transcription.trim()) {
+                const cleanText = data.transcription.trim();
+                setText((prev) => {
+                  const prefix = prev.trim() ? prev.trim() + " " : "";
+                  const updated = (prefix + cleanText).slice(0, MAX_CHARS);
+                  if (onSyncText) onSyncText(updated, audioLang);
+                  return updated;
+                });
+                setAudioStatus(
+                  isUrdu
+                    ? "Urdu speech transcribed cleanly via Faster-Whisper!"
+                    : "English speech transcribed cleanly via Faster-Whisper!"
+                );
+              } else {
+                setAudioStatus("Whisper detected low volume or silence in the recording.");
+              }
+            } else {
+              setAudioStatus("Server transcription error. Please try again.");
+            }
+          } catch (e) {
+            console.error("Whisper live mic transcribe error:", e);
+            setAudioStatus("Transcription error: " + (e.message || "Network issue"));
+          }
+        };
+        reader.readAsDataURL(audioBlob);
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      setAudioStatus(
+        audioLang === "ur-PK"
+          ? "مائیک فعال ہے... براہ کرم بولیں (مکمل ہونے پر Stop دبائیں)"
+          : "Microphone Active: Speak clearly, then click Stop Mic when finished"
+      );
+    } catch (err) {
+      console.error("Microphone access failed:", err);
+      setAudioStatus("Microphone access failed: Please allow microphone permission in your browser.");
+    }
+  };
+
+  const stopMediaRecorder = () => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const recognitionRef = useRef(null);
+
+  const startSpeechRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setAudioStatus("Browser speech recognition is not supported on this device. Please type your claim.");
+      return;
+    }
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = audioLang === "ur-PK" ? "ur-PK" : "en-US";
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        isRecordingRef.current = true;
+        setAudioStatus(
+          audioLang === "ur-PK"
+            ? "مائیک فعال ہے... براہ کرم بولیں"
+            : "Listening... Speak clearly (click Stop Mic when finished)"
+        );
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript.trim()) {
+          const prefix = baseTextRef.current ? baseTextRef.current + " " : "";
+          const updated = (prefix + transcript.trim()).slice(0, MAX_CHARS);
+          setText(updated);
+          if (onSyncText) onSyncText(updated, audioLang);
+        }
+      };
+
+      recognition.onerror = (e) => {
+        console.warn("Speech recognition notice:", e.error);
+        if (e.error !== "no-speech") {
+          setAudioStatus(`Microphone status: ${e.error}`);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        setAudioStatus("Voice input captured!");
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+    } catch (e) {
+      console.warn("SpeechRecognition start error:", e);
+      startMediaRecorder();
+    }
+  };
+
+  const stopSpeechRecognition = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (err) {
+        console.debug("Recognition stop error:", err);
+      }
+      recognitionRef.current = null;
+    }
+    setIsRecording(false);
+    isRecordingRef.current = false;
+  };
+
+  const toggleRecording = () => {
+    baseTextRef.current = text.trim();
+    if (isRecording) {
+      if (recognitionRef.current) {
+        stopSpeechRecognition();
+      } else {
+        stopMediaRecorder();
+      }
+    } else {
+      if (backendStatus === "online") {
+        startMediaRecorder();
+      } else {
+        startSpeechRecognition();
+      }
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadedAudioName(file.name);
+    setAudioStatus(`Uploading & transcribing "${file.name}" using Faster-Whisper...`);
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64Audio = reader.result ? String(reader.result).split(",")[1] : null;
+        const API_BASE = getApiBase();
+
+        const resp = await fetch(`${API_BASE}/api/transcribe`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            language: audioLang === "ur-PK" ? "ur" : (audioLang === "en-US" ? "en" : "auto"),
+            audio_base64: base64Audio,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.detail || `Server returned ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        if (data.transcription && data.transcription.trim()) {
+          const cleanText = data.transcription.trim();
+          setText(cleanText);
+          if (onSyncText) onSyncText(cleanText, audioLang);
+          setAudioStatus(`Transcribed via ${data.source} (${data.detected_language.toUpperCase()}, conf: ${data.confidence}): "${file.name}"`);
+        } else {
+          setAudioStatus("Whisper detected silence or unintelligible speech in this audio clip.");
+        }
+      } catch (err) {
+        console.error("Whisper transcription error:", err);
+        setAudioStatus("Transcription error: " + (err.message || "Failed to transcribe audio."));
+      }
+    };
+    reader.onerror = () => {
+      setAudioStatus("Error reading audio file from disk.");
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleMove = useCallback((e) => {
     const rect = heroRef.current?.getBoundingClientRect();
@@ -615,52 +977,160 @@ function InputScreen({ text, setText, onAnalyze, shakeKey }) {
       ref={heroRef}
       onMouseMove={handleMove}
       onMouseLeave={() => setMouse(null)}
-      className="min-h-screen flex flex-col items-center px-6 py-16 relative overflow-hidden"
+      className="min-h-screen flex flex-col items-center px-4 sm:px-6 py-8 sm:py-16 relative overflow-hidden"
       style={{ backgroundColor: C.paper, backgroundImage: `radial-gradient(${C.lineOuter} 1px, transparent 1px)`, backgroundSize: "24px 24px" }}
     >
-      {/* single orchestrated hero moment: a soft spotlight that follows the cursor */}
+      {/* single orchestrated hero moment: soft spotlight that follows cursor or ambient mobile glow */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: mouse ? `radial-gradient(480px circle at ${mouse.x * 100}% ${mouse.y * 100}%, ${C.brandSoft}55, transparent 70%)` : "transparent",
+          background: mouse
+            ? `radial-gradient(480px circle at ${mouse.x * 100}% ${mouse.y * 100}%, ${C.brandSoft}55, transparent 70%)`
+            : `radial-gradient(360px circle at 50% 15%, ${C.brandSoft}35, transparent 70%)`,
           transition: "background 0.15s ease-out",
         }}
       />
 
-      <div className="fl-float absolute w-16 h-6 hidden sm:block" style={{ top: "18%", left: "6%", backgroundColor: C.highlight, opacity: 0.6, "--rot": "-8deg", transform: "rotate(-8deg)" }} />
-      <div className="fl-float absolute w-3 h-3 rounded-full hidden sm:block" style={{ top: "62%", left: "9%", backgroundColor: C.brand, opacity: 0.5, "--rot": "0deg", animationDelay: "1.2s" }} />
-      <div className="fl-float absolute w-3 h-3 rounded-full hidden sm:block" style={{ top: "12%", right: "10%", backgroundColor: C.info, opacity: 0.5, "--rot": "0deg", animationDelay: "2.4s" }} />
+      {/* Floating decorative stickers animated on both mobile and desktop */}
+      <div className="fl-float absolute w-12 sm:w-16 h-5 sm:h-6 opacity-60" style={{ top: "8%", left: "4%", backgroundColor: C.highlight, "--rot": "-8deg", transform: "rotate(-8deg)" }} />
+      <div className="fl-float absolute w-3 h-3 rounded-full opacity-50" style={{ top: "45%", left: "6%", backgroundColor: C.brand, "--rot": "0deg", animationDelay: "1.2s" }} />
+      <div className="fl-float absolute w-3.5 h-3.5 rounded-full opacity-50" style={{ top: "10%", right: "6%", backgroundColor: C.info, "--rot": "0deg", animationDelay: "2.4s" }} />
 
       <div className="w-full max-w-2xl relative">
-        <div className="flex items-center justify-between mb-14 fl-fade-up">
+        {/* Responsive Header: Guaranteed no overlap on mobile or desktop */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-8 sm:mb-14 fl-fade-up">
           <Logo />
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold" style={{ backgroundColor: C.paperRaised, border: `1.5px solid ${C.ink}` }}>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span style={{ fontFamily: MONO, color: C.ink }}>FactLens NLP Pipeline • Active</span>
+          <div className="flex items-center gap-2 shrink-0">
+            {deviceCount > 1 ? (
+              <div
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-400 shadow-xs animate-pulse"
+                style={{ fontFamily: MONO }}
+                title="Phone and laptop are synced in real-time"
+              >
+                <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                <span>Live Sync ({deviceCount})</span>
+              </div>
+            ) : (
+              <div
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+                style={{
+                  backgroundColor: C.paperRaised,
+                  border: `1.5px solid ${C.ink}`,
+                  fontFamily: MONO,
+                  color: C.ink,
+                }}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>FactLens Active</span>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-[1fr_150px] gap-6 items-center">
-          <div className="fl-fade-up" style={{ animationDelay: "0.05s" }}>
-            <h1 className="text-4xl sm:text-[2.75rem] font-extrabold leading-[1.08] tracking-tight" style={{ color: C.ink, fontFamily: DISPLAY }}>
-              Automated Fact Verification & Evidence Retrieval
-            </h1>
-            <p className="mt-4 text-base max-w-lg leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>
+        {/* Backend Connectivity Status Notification */}
+        <BackendStatusBar status={backendStatus} info={backendInfo} onRetry={onRetryBackend} onShowInstructions={onShowOfflineModal} />
+
+        {/* Hero Title & Animated Doodle */}
+        <div className="flex flex-col sm:grid sm:grid-cols-[1fr_150px] gap-6 items-center">
+          <div className="fl-fade-up w-full" style={{ animationDelay: "0.05s" }}>
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="text-3xl sm:text-[2.75rem] font-extrabold leading-[1.1] tracking-tight" style={{ color: C.ink, fontFamily: DISPLAY }}>
+                Automated Fact Verification & Evidence Retrieval
+              </h1>
+              {/* Doodle displayed beside title on mobile so animations shine on phones! */}
+              <div className="block sm:hidden w-16 h-16 shrink-0 fl-float" style={{ "--rot": "-4deg" }}>
+                <HeroDoodle mouse={mouse} />
+              </div>
+            </div>
+            <p className="mt-3 sm:mt-4 text-sm sm:text-base max-w-lg leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>
               FactLens resolves pronouns, extracts factual assertions, and verifies claims against multi-source evidence corpora using BM25 and semantic embeddings.
             </p>
           </div>
-          <div className="hidden sm:block w-full h-full fl-fade-up" style={{ animationDelay: "0.15s" }}><HeroDoodle mouse={mouse} /></div>
+          <div className="hidden sm:block w-full h-full fl-fade-up" style={{ animationDelay: "0.15s" }}>
+            <HeroDoodle mouse={mouse} />
+          </div>
         </div>
 
         <div
-          className={`fl-input-card mt-10 rounded-2xl overflow-hidden fl-fade-up ${shakeKey ? "fl-shake" : ""}`}
+          className={`fl-input-card mt-8 sm:mt-10 rounded-2xl overflow-hidden fl-fade-up ${shakeKey ? "fl-shake" : ""}`}
           style={{ backgroundColor: C.paperRaised, border: `2px solid ${C.ink}`, boxShadow: `5px 5px 0 ${C.line}`, animationDelay: "0.2s" }}
         >
+          {/* Audio Input Header / Mode Selector (Responsive flex-wrap) */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 sm:px-5 py-2.5 bg-slate-50 border-b" style={{ borderColor: C.line }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 font-mono">
+                <Volume2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                <span className="truncate">Audio Input</span>
+              </span>
+              {isRecording && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 animate-pulse shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                  RECORDING
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={audioLang}
+                onChange={(e) => setAudioLang(e.target.value)}
+                className="text-xs bg-white border border-slate-300 rounded px-2 py-1 font-sans text-slate-700 focus:outline-none shadow-2xs"
+              >
+                <option value="en-US">English</option>
+                <option value="ur-PK">اردو (Urdu)</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={toggleRecording}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all shadow-xs ${
+                  isRecording
+                    ? "bg-rose-600 text-white animate-pulse"
+                    : "bg-white border border-slate-300 text-slate-800 hover:bg-slate-100"
+                }`}
+                title={isRecording ? "Stop live recording" : "Start live voice dictation"}
+              >
+                {isRecording ? <Square className="w-3 h-3 fill-current" /> : <Mic className="w-3.5 h-3.5 text-teal-700" />}
+                <span>{isRecording ? "Stop Mic" : "Live Mic"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 transition-all shadow-xs"
+                title="Upload audio clip (.mp3, .wav, .m4a)"
+              >
+                <Upload className="w-3.5 h-3.5 text-slate-600" />
+                <span>Upload</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {audioStatus && (
+            <div className="px-5 py-1.5 bg-teal-50 text-teal-800 text-xs flex items-center justify-between border-b border-teal-200">
+              <span className="truncate">{audioStatus}</span>
+              {uploadedAudioName && (
+                <span className="font-mono text-[10px] text-teal-600">{uploadedAudioName}</span>
+              )}
+            </div>
+          )}
+
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))}
+            onChange={(e) => {
+              const nextVal = e.target.value.slice(0, MAX_CHARS);
+              setText(nextVal);
+              if (onSyncText) onSyncText(nextVal);
+            }}
             onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onAnalyze(text); }}
-            placeholder="Paste a sentence or short paragraph to check…"
+            placeholder="Paste text or speak using Live Mic / Upload Audio above…"
             rows={5}
             className="w-full resize-none px-5 py-4 bg-transparent focus:outline-none text-base leading-relaxed"
             style={{ color: C.ink, fontFamily: BODY }}
@@ -1237,10 +1707,82 @@ export default function App() {
   const [pendingCorefCount, setPendingCorefCount] = useState(0);
   const [toast, setToast] = useState(null);
   const [shake, setShake] = useState(0);
+  const [deviceCount, setDeviceCount] = useState(1);
+  const [backendStatus, setBackendStatus] = useState("checking"); // "online" | "offline" | "checking"
+  const [backendInfo, setBackendInfo] = useState(null);
 
-  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  const API_BASE = getApiBase();
+  const wsRef = useRef(null);
+  const textRef = useRef(text);
+  const runAnalysisRef = useRef(null);
 
-  const fetchRealAnalysis = async (cleanText) => {
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
+  // Active Health Prober:
+  // Detects whether FastAPI is running on port 8000.
+  // When offline, seamlessly falls back to Standalone Interactive Simulation
+  // and guides the user/evaluator on how to start the neural backend.
+  const checkBackendHealth = useCallback(async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        setBackendStatus("online");
+        setBackendInfo(data);
+        return true;
+      }
+      setBackendStatus("offline");
+      return false;
+    } catch {
+      setBackendStatus("offline");
+      return false;
+    }
+  }, [API_BASE]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkBackendHealth();
+    }, 100);
+    const interval = setInterval(checkBackendHealth, 8000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [checkBackendHealth]);
+
+  const broadcastSyncText = useCallback((updatedText, audioLang = "en-US") => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "UPDATE_TEXT",
+        text: updatedText,
+        audioLang: audioLang,
+        timestamp: Date.now(),
+      }));
+    } else {
+      // REST fallback
+      fetch(`${API_BASE}/api/sync/state`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: updatedText, audioLang: audioLang }),
+      }).catch(() => {});
+    }
+  }, [API_BASE]);
+
+  const broadcastAnalyze = useCallback((targetText) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "ANALYZE_TRIGGER",
+        text: targetText,
+      }));
+    }
+  }, []);
+
+  const fetchRealAnalysis = useCallback(async (cleanText) => {
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
@@ -1299,11 +1841,14 @@ export default function App() {
     } catch {
       return null;
     }
-  };
+  }, [API_BASE]);
 
-  const runAnalysis = async (inputText, exampleId) => {
+  const runAnalysis = useCallback(async (inputText, exampleId, shouldBroadcast = true) => {
     const clean = inputText.trim();
     if (!clean) { setShake((s) => s + 1); return; }
+    if (shouldBroadcast) {
+      broadcastAnalyze(clean);
+    }
     setAnalyzedText(clean);
     setScreen("loading");
     setStageIndex(0);
@@ -1329,9 +1874,86 @@ export default function App() {
       setTimeout(advance, delay);
     };
     setTimeout(advance, 340);
-  };
+  }, [broadcastAnalyze, fetchRealAnalysis]);
 
-  const reset = () => { setScreen("input"); setText(""); setResults(null); window.scrollTo(0, 0); };
+  useEffect(() => {
+    runAnalysisRef.current = runAnalysis;
+  }, [runAnalysis]);
+
+  // Live Cross-Device Sync WebSocket:
+  // Mirrors speech input, text edits, and analysis triggers in real time between mobile phone and laptop.
+  useEffect(() => {
+    let active = true;
+    let ws = null;
+    let reconnectTimer = null;
+
+    const connectWebSocket = () => {
+      try {
+        const hostname = (typeof window !== "undefined" && window.location.hostname) || "localhost";
+        const wsUrl = `ws://${hostname}:8000/ws/sync`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          if (!active) return;
+          setBackendStatus("online");
+        };
+
+        ws.onmessage = (event) => {
+          if (!active) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "INIT_STATE") {
+              if (data.state && data.state.text && !textRef.current) {
+                setText(data.state.text);
+              }
+              if (data.device_count) setDeviceCount(data.device_count);
+            } else if (data.type === "DEVICE_COUNT") {
+              setDeviceCount(data.count || 1);
+            } else if (data.type === "SYNC_TEXT") {
+              if (data.text !== undefined && data.text !== textRef.current) {
+                setText(data.text);
+              }
+            } else if (data.type === "ANALYZE_TRIGGER") {
+              if (data.text && runAnalysisRef.current) {
+                runAnalysisRef.current(data.text, null, false);
+              }
+            }
+          } catch (e) {
+            console.error("WebSocket message parsing error:", e);
+          }
+        };
+
+        ws.onclose = () => {
+          if (!active) return;
+          reconnectTimer = setTimeout(connectWebSocket, 2000);
+        };
+
+        ws.onerror = () => {
+          if (ws) ws.close();
+        };
+
+        wsRef.current = ws;
+      } catch (err) {
+        console.warn("WebSocket setup warning:", err);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      active = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) ws.close();
+    };
+  }, []);
+
+  const reset = () => {
+    setScreen("input");
+    setText("");
+    setResults(null);
+    broadcastSyncText("");
+    window.scrollTo(0, 0);
+  };
 
   useEffect(() => {
     if (!shake) return;
@@ -1346,7 +1968,19 @@ export default function App() {
       <div className="fl-grain" aria-hidden="true" />
       {screen === "loading" && <LoadingScreen stageIndex={stageIndex} usedRetry={pendingRetry} usedWikipediaFallback={pendingWikipedia} corefCount={pendingCorefCount} />}
       {screen === "results" && results && <ResultsScreen originalText={analyzedText} results={results} onReset={reset} onCopied={() => setToast("Report copied")} />}
-      {screen === "input" && <InputScreen text={text} setText={setText} onAnalyze={runAnalysis} shakeKey={shake} />}
+      {screen === "input" && (
+        <InputScreen
+          text={text}
+          setText={setText}
+          onAnalyze={runAnalysis}
+          shakeKey={shake}
+          deviceCount={deviceCount}
+          onSyncText={broadcastSyncText}
+          backendStatus={backendStatus}
+          backendInfo={backendInfo}
+          onRetryBackend={checkBackendHealth}
+        />
+      )}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
     </div>
   );
