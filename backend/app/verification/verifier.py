@@ -184,21 +184,33 @@ def _heuristic_stance (claim_text: str, passage_text: str) -> str:
     claim_l = claim_text.lower ()
     pass_l = passage_text.lower ()
 
-    # Morphological negation (e.g. ineffective vs effectiveness)
+    # 1. Morphological negation (e.g. ineffective vs effectiveness)
     if ("ineffective" in claim_l or "inefficacy" in claim_l) and ("effective" in pass_l or "effectiveness" in pass_l):
         return "Refuted"
     if ("effective" in claim_l or "effectiveness" in claim_l) and ("ineffective" in pass_l or "inefficacy" in pass_l):
         return "Refuted"
 
-    # Direct negation conflict (e.g. causes vs does not cause / no evidence)
-    if ("cause" in claim_l or "causes" in claim_l) and any (p in pass_l for p in ["does not cause", "do not cause", "no evidence", "not cause"]):
+    # 2. Check negation around causality
+    neg_phrases = ["does not cause", "doesn't cause", "do not cause", "don't cause", "not cause", "never causes", "no evidence"]
+    claim_neg_cause = any (phrase in claim_l for phrase in neg_phrases)
+    pass_neg_cause = any (phrase in pass_l for phrase in neg_phrases)
+
+    # If claim explicitly claims causality without negation, but passage denies causality -> Refuted
+    if any (w in claim_l for w in ["causes", "causing", " cause "]) and not claim_neg_cause and pass_neg_cause:
         return "Refuted"
 
-    neg_markers = ["does not", "did not", "do not", "no evidence", "not cause", "not linked", "cannot", "is not", "are not", "was not", "were not"]
-    claim_has_neg = any (p in claim_l for p in ["not", "never", "no ", "n't", "ineffective", "false", "untrue"])
-    pass_has_neg = any (p in pass_l for p in neg_markers)
+    # If both claim and passage state negative causality (e.g., vaccine does not cause infertility) -> Supported
+    if claim_neg_cause and pass_neg_cause:
+        return "Supported"
 
-    if not claim_has_neg and pass_has_neg:
+    # If claim states safety and passage confirms no risk / safety -> Supported
+    if "safe" in claim_l and ("risk" in pass_l or "safe" in pass_l):
+        return "Supported"
+
+    # 3. Direct polarity conflict
+    if ("safe" in claim_l and "unsafe" in pass_l) or ("unsafe" in claim_l and "safe" in pass_l):
+        return "Refuted"
+    if ("harmful" in claim_l and "harmless" in pass_l) or ("harmless" in claim_l and "harmful" in pass_l):
         return "Refuted"
 
     return "Supported"
