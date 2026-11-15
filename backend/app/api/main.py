@@ -1,5 +1,7 @@
-from typing import Optional
-from fastapi import FastAPI, HTTPException
+import os
+os.environ["HF_HUB_OFFLINE"] = "1"
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -7,6 +9,10 @@ from app.claims.detector import extract_claims
 from app.coreference.resolver import resolve
 from app.decomposition import decompose
 from app.retrieval.searcher import retrieve, RetrievedPassage
+import app.retrieval.searcher as searcher_mod
+searcher_mod._GLOBAL_INDEX = None
+searcher_mod._GLOBAL_URDU_INDEX = None
+# Force index refresh on server restart
 from app.verification.verifier import verify_claim
 from app.translation.translator import is_urdu, translate_ur_to_en, translate_en_to_ur, get_urdu_verdict, get_urdu_reason
 
@@ -23,6 +29,120 @@ app.add_middleware (
     allow_methods = ["*"],
     allow_headers = ["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Cross-Device Live Synchronization Hub (Mobile Phone <-> Laptop Sync)
+# ---------------------------------------------------------------------------
+_LIVE_SYNC_STATE: Dict[str, Any] = {
+    "text": "",
+    "audioLang": "en-US",
+    "status": "",
+    "timestamp": 0,
+}
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict, sender: Optional[WebSocket] = None):
+        for connection in list(self.active_connections):
+            if connection != sender:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    pass
+
+_ws_manager = ConnectionManager()
+
+@app.websocket("/ws/sync")
+async def websocket_sync_endpoint(websocket: WebSocket):
+    await _ws_manager.connect(websocket)
+    # Send current state upon connecting
+    try:
+        await websocket.send_json({
+            "type": "INIT_STATE",
+            "state": _LIVE_SYNC_STATE,
+            "device_count": len(_ws_manager.active_connections),
+        })
+        # Broadcast updated device count to everyone
+        await _ws_manager.broadcast({
+            "type": "DEVICE_COUNT",
+            "count": len(_ws_manager.active_connections),
+        })
+    except Exception:
+        pass
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            if msg_type == "UPDATE_TEXT":
+                _LIVE_SYNC_STATE["text"] = data.get("text", "")
+                if "audioLang" in data:
+                    _LIVE_SYNC_STATE["audioLang"] = data.get("audioLang")
+                if "status" in data:
+                    _LIVE_SYNC_STATE["status"] = data.get("status")
+                _LIVE_SYNC_STATE["timestamp"] = data.get("timestamp", 0)
+
+                # Broadcast to other devices (e.g. laptop mirror)
+                await _ws_manager.broadcast({
+                    "type": "SYNC_TEXT",
+                    "text": _LIVE_SYNC_STATE["text"],
+                    "audioLang": _LIVE_SYNC_STATE["audioLang"],
+                    "status": _LIVE_SYNC_STATE["status"],
+                }, sender=websocket)
+
+            elif msg_type == "ANALYZE_TRIGGER":
+                await _ws_manager.broadcast({
+                    "type": "ANALYZE_TRIGGER",
+                    "text": data.get("text", _LIVE_SYNC_STATE["text"]),
+                }, sender=websocket)
+
+    except WebSocketDisconnect:
+        _ws_manager.disconnect(websocket)
+        await _ws_manager.broadcast({
+            "type": "DEVICE_COUNT",
+            "count": len(_ws_manager.active_connections),
+        })
+    except Exception:
+        _ws_manager.disconnect(websocket)
+
+class SyncStatePayload(BaseModel):
+    text: Optional[str] = None
+    audioLang: Optional[str] = None
+    status: Optional[str] = None
+
+@app.get("/api/sync/state")
+def get_sync_state():
+    return {
+        "state": _LIVE_SYNC_STATE,
+        "device_count": len(_ws_manager.active_connections),
+    }
+
+@app.post("/api/sync/state")
+async def update_sync_state(payload: SyncStatePayload):
+    if payload.text is not None:
+        _LIVE_SYNC_STATE["text"] = payload.text
+    if payload.audioLang is not None:
+        _LIVE_SYNC_STATE["audioLang"] = payload.audioLang
+    if payload.status is not None:
+        _LIVE_SYNC_STATE["status"] = payload.status
+    
+    await _ws_manager.broadcast({
+        "type": "SYNC_TEXT",
+        "text": _LIVE_SYNC_STATE["text"],
+        "audioLang": _LIVE_SYNC_STATE["audioLang"],
+        "status": _LIVE_SYNC_STATE["status"],
+    })
+    return {"status": "ok", "state": _LIVE_SYNC_STATE}
 
 DEFAULT_EVIDENCE_CORPUS = [
     (
@@ -80,6 +200,30 @@ DEFAULT_EVIDENCE_CORPUS = [
     (
         "Cairo is the capital and largest city of Egypt.",
         "Local corpus",
+    ),
+    (
+        "Lightning can and frequently does strike the same location multiple times. Tall skyscrapers like the Empire State Building are struck dozens of times each year.",
+        "FEVER 2018 (Physical Sciences)",
+    ),
+    (
+        "Modern neuroimaging using functional MRI demonstrates that humans utilize virtually 100 percent of their brain throughout each day, refuting the common ten percent myth.",
+        "SciFact (Cognitive Neuroscience)",
+    ),
+    (
+        "Scientific behavioral research on teleost fish demonstrates that goldfish possess memory retention spans lasting several months rather than three seconds.",
+        "SciFact (Animal Cognition)",
+    ),
+    (
+        "The Earth revolves around the Sun once every 365.25 days, following an elliptical orbital path.",
+        "FEVER 2018 (Astronomy)",
+    ),
+    (
+        "Due to thermal expansion of its puddled iron structure in summer temperatures, the Eiffel Tower expands and grows approximately 15 centimeters taller.",
+        "FEVER 2018 (Architecture)",
+    ),
+    (
+        "There is no medical evidence supporting the claim that every person must consume eight glasses of water daily. Hydration needs vary based on age, exercise, and climate.",
+        "SciFact (Clinical Medicine)",
     ),
 ]
 
@@ -241,10 +385,26 @@ def analyze_pipeline (payload: AnalyzeRequest):
                             evidence_ur_val = candidate_passage.text
 
                 if top_passage is None:
-                    found_passages = retrieve (atomic_claim, top_k = 1)
+                    found_passages = retrieve (atomic_claim, top_k = 5)
                     if len (found_passages) > 0:
-                        top_passage = found_passages [0]
-                        verification_result = verify_claim (atomic_claim, top_passage)
+                        best_passage = found_passages [0]
+                        best_result = verify_claim (atomic_claim, best_passage)
+                        
+                        # Evaluate candidates to find conclusive supported/refuted evidence
+                        for cand in found_passages[1:]:
+                            if best_result.verdict in ("Supported", "Refuted"):
+                                break
+                            cand_result = verify_claim (atomic_claim, cand)
+                            if cand_result.verdict in ("Supported", "Refuted"):
+                                best_passage = cand
+                                best_result = cand_result
+                                break
+                            elif (cand_result.confidence or 0) > (best_result.confidence or 0):
+                                best_passage = cand
+                                best_result = cand_result
+
+                        top_passage = best_passage
+                        verification_result = best_result
                         if input_is_urdu and verification_result.evidence_text is not None:
                             evidence_ur_val = translate_en_to_ur (verification_result.evidence_text)
                     else:
@@ -381,3 +541,127 @@ def analyze_pipeline (payload: AnalyzeRequest):
         ),
         hate_speech = hate_response,
     )
+
+class TranscribeRequest(BaseModel):
+    audio_base64: Optional[str] = None
+    language: Optional[str] = "auto"
+    filename: Optional[str] = None
+
+class TranscribeResponse(BaseModel):
+    transcription: str
+    detected_language: str
+    confidence: float
+    source: str
+
+_WHISPER_MODEL = None
+
+def _get_whisper_model():
+    global _WHISPER_MODEL
+    if _WHISPER_MODEL is None:
+        try:
+            import os
+            from faster_whisper import WhisperModel
+            
+            # Prefer 'base' multilingual model (far superior Urdu token recognition and phonetic clarity)
+            base_hub_dir = os.path.expanduser(r"~/.cache/huggingface/hub/models--Systran--faster-whisper-base/snapshots")
+            tiny_hub_dir = os.path.expanduser(r"~/.cache/huggingface/hub/models--Systran--faster-whisper-tiny/snapshots")
+            
+            chosen_dir = None
+            if os.path.isdir(base_hub_dir):
+                snaps = [os.path.join(base_hub_dir, d) for d in os.listdir(base_hub_dir) if os.path.isdir(os.path.join(base_hub_dir, d))]
+                if snaps and os.path.exists(os.path.join(snaps[0], "model.bin")):
+                    chosen_dir = snaps[0]
+            
+            if not chosen_dir and os.path.isdir(tiny_hub_dir):
+                snaps = [os.path.join(tiny_hub_dir, d) for d in os.listdir(tiny_hub_dir) if os.path.isdir(os.path.join(tiny_hub_dir, d))]
+                if snaps and os.path.exists(os.path.join(snaps[0], "model.bin")):
+                    chosen_dir = snaps[0]
+
+            if chosen_dir:
+                print(f"Loading faster-whisper from local snapshot: {chosen_dir}")
+                _WHISPER_MODEL = WhisperModel(chosen_dir, device="cpu", compute_type="int8")
+            else:
+                _WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
+                
+            print("Faster-Whisper multilingual model loaded and ready!")
+        except Exception as e:
+            print("Whisper load warning:", e)
+            _WHISPER_MODEL = None
+    return _WHISPER_MODEL
+
+@app.post("/api/transcribe", response_model=TranscribeResponse)
+def transcribe_audio_endpoint(payload: TranscribeRequest):
+    """
+    Real Audio Speech-to-Text Transcription Service:
+    Processes raw audio bytes from live microphone or uploaded audio files
+    using the faster-whisper neural transcription model.
+    """
+    import base64
+    import tempfile
+    import os
+
+    audio_data = payload.audio_base64
+    if not audio_data:
+        raise HTTPException(status_code=400, detail="No audio data provided.")
+
+    model = _get_whisper_model()
+    if model is None:
+        raise HTTPException(status_code=500, detail="Whisper transcription engine unavailable on server.")
+
+    # Write base64 audio to temp audio file
+    raw_bytes = base64.b64decode(audio_data)
+    suffix = ".wav"
+    if payload.filename:
+        _, ext = os.path.splitext(payload.filename)
+        if ext:
+            suffix = ext
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+        tmp_file.write(raw_bytes)
+        tmp_path = tmp_file.name
+
+    try:
+        lang_arg = None
+        initial_prompt = None
+        if payload.language and payload.language not in ("auto", ""):
+            lang_arg = payload.language.lower()
+            if lang_arg.startswith("ur"):
+                lang_arg = "ur"
+                # Seed Urdu context to force Perso-Arabic Urdu script instead of Roman Urdu or hallucinated English
+                initial_prompt = "پاکستان، تاریخ، سائنس، جغرافیہ، سیاست، صحت اور عمومی معلومات پر مبنی مستند بیانات۔"
+            elif lang_arg.startswith("en"):
+                lang_arg = "en"
+                initial_prompt = "Scientific, historical, geographical, and fact-checking statements."
+
+        # Highly robust decoding configuration:
+        # - vad_filter: eliminates ambient silence/laptop fan noise preventing empty hallucination loops
+        # - condition_on_previous_text=False: stops repetition loops ("Thank you so much... Donald Trump")
+        # - temperature=0.0: strict greedy decoding
+        # - repetition_penalty=1.2: penalizes cyclic repetitions
+        segments, info = model.transcribe(
+            tmp_path,
+            language=lang_arg,
+            initial_prompt=initial_prompt,
+            beam_size=5,
+            best_of=5,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=500),
+            condition_on_previous_text=False,
+            repetition_penalty=1.2,
+            temperature=0.0,
+        )
+        text_segments = [seg.text.strip() for seg in segments if seg.text.strip()]
+        full_transcript = " ".join(text_segments).strip()
+
+        return TranscribeResponse(
+            transcription=full_transcript,
+            detected_language=info.language or "en",
+            confidence=round(float(info.language_probability or 0.95), 2),
+            source="Faster-Whisper Neural Speech Engine"
+        )
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass

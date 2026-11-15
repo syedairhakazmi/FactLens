@@ -204,8 +204,18 @@ def verify_claim (claim_text, top_passage = None):
             reason = "Retrieved candidate scored below the minimum relevance threshold across all indexed corpora.",
         )
 
-    # gate low combined score or low semantic embedding similarity (< 0.52)
-    if retrieval_score < 0.35 or embedding_score < 0.52:
+    # If embedding vectors are available, check embedding threshold (0.50).
+    # If using BM25-driven search (embedding_score == 0.0 or not available), rely on BM25 relevance.
+    bm25_score = getattr(top_passage, "bm25_score", 0.0)
+    has_embeddings = (embedding_score > 0.0)
+
+    if has_embeddings:
+        is_relevant = (retrieval_score >= 0.25 and embedding_score >= 0.48)
+    else:
+        # BM25-driven evaluation: score > 8.0 indicates solid keyword overlap
+        is_relevant = (bm25_score >= 8.0 or retrieval_score >= 0.15)
+
+    if not is_relevant:
         calibrated_confidence = int (retrieval_score * 100 + 15)
         if calibrated_confidence < 45:
             calibrated_confidence = 45

@@ -16,6 +16,9 @@ _STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "in", "on", "at", "to", "for", "of", "and", "or", "but", "with",
     "this", "that", "these", "those", "it", "its", "as", "by", "from",
+    "every", "all", "also", "into", "throughout", "even", "when", "how",
+    "due", "because", "have", "has", "had", "can", "could", "will", "would",
+    "about", "their", "our", "your", "they", "them", "he", "she", "his", "her"
 }
 
 @dataclass
@@ -52,9 +55,18 @@ def _get_embedding_model ():
     # load bge-base embedding model (ranked #1 on mteb benchmark for retrieval)
     try:
         from sentence_transformers import SentenceTransformer
-        return SentenceTransformer ("BAAI/bge-base-en-v1.5")
+        snap_dir = os.path.expanduser(r"~/.cache/huggingface/hub/models--BAAI--bge-base-en-v1.5/snapshots")
+        if os.path.isdir(snap_dir):
+            snaps = [os.path.join(snap_dir, d) for d in os.listdir(snap_dir) if os.path.isdir(os.path.join(snap_dir, d))]
+            if snaps:
+                return SentenceTransformer(snaps[0], local_files_only=True)
+        return SentenceTransformer ("BAAI/bge-base-en-v1.5", local_files_only=True)
     except Exception:
-        return None
+        try:
+            from sentence_transformers import SentenceTransformer
+            return SentenceTransformer ("BAAI/bge-base-en-v1.5")
+        except Exception:
+            return None
 
 def _min_max_normalize (scores):
     # scale scores between 0 and 1
