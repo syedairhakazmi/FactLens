@@ -189,6 +189,14 @@ class CorpusIndex:
                         pass
         else:
             self.passage_vectors = None
+            if self.cache_file_path is not None and len (self.passage_texts) > 0:
+                try:
+                    cache_folder = os.path.dirname (self.cache_file_path)
+                    if len (cache_folder) > 0:
+                        os.makedirs (cache_folder, exist_ok = True)
+                    np.save (self.cache_file_path, np.zeros ((len (self.passage_texts), 384), dtype = np.float32))
+                except Exception:
+                    pass
 
     def search (self, query, top_k = 3):
         # hybrid search over the indexed dataset

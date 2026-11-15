@@ -4,7 +4,7 @@ import {
   CheckCircle2, XCircle, HelpCircle, ArrowLeft, Loader2,
   FileText, AlertTriangle, Globe2, Database, ArrowUpRight, Sparkles,
   ArrowRight, Settings2, Link2, RefreshCw, MessageSquare, Copy, Check,
-  Command, Mic, MicOff, Upload, Volume2, Square, Radio
+  Command, Mic, Upload, Volume2, Square, Radio
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -604,7 +604,7 @@ function Toast({ message, onDone }) {
 const CATEGORY_COLOR = { factcheck: C.info, hatespeech: C.brand };
 const MAX_CHARS = 3000;
 
-function BackendStatusBar({ status, info, onRetry }) {
+function BackendStatusBar({ status, onRetry }) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const command = "uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload";
@@ -696,162 +696,6 @@ function BackendStatusBar({ status, info, onRetry }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function BackendOfflineScreen({ onDismiss, onRetry, onSelectSample, isChecking }) {
-  const [copied, setCopied] = useState(false);
-  const command = "uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload";
-
-  const handleCopy = () => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(command);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const sampleTeasers = [
-    { id: "urdu", tag: "اردو دعویٰ (Urdu)", text: "پیرس فرانس کا دارالحکومت ہے۔", sub: "Automatic translation & verification" },
-    { id: "eiffel", tag: "Historic Fact", text: "The Eiffel Tower was completed in 1889.", sub: "SciFact & FEVER evidence retrieval" },
-    { id: "vaccine", tag: "Refuted Medical", text: "The COVID-19 vaccine causes infertility in most patients.", sub: "Clinical trials counter-evidence" },
-  ];
-
-  return (
-    <main className="min-h-screen p-4 sm:p-8 flex flex-col items-center justify-center relative overflow-hidden" style={{ backgroundColor: C.paper }}>
-      {/* Decorative floating shapes */}
-      <div className="fl-float absolute w-16 h-6 opacity-40 rounded" style={{ top: "6%", left: "5%", backgroundColor: C.highlight, "--rot": "-10deg" }} />
-      <div className="fl-float absolute w-4 h-4 rounded-full opacity-40" style={{ top: "20%", right: "8%", backgroundColor: C.brand, "--rot": "0deg", animationDelay: "1s" }} />
-      <div className="fl-float absolute w-6 h-6 rounded-full opacity-30" style={{ bottom: "12%", left: "8%", backgroundColor: C.info, "--rot": "0deg", animationDelay: "2s" }} />
-
-      <div className="w-full max-w-2xl relative fl-fade-up">
-        {/* Top Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6 sm:mb-8">
-          <Logo />
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-              Backend Offline (Port 8000)
-            </span>
-          </div>
-        </div>
-
-        {/* Main Creative Alert Container */}
-        <div
-          className="rounded-3xl p-6 sm:p-8 border-2 shadow-lg relative overflow-hidden"
-          style={{
-            backgroundColor: C.paperRaised,
-            borderColor: C.brand,
-            boxShadow: `8px 8px 0 ${C.line}`,
-          }}
-        >
-          {/* Header Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-800 border border-rose-300 mb-4 font-mono">
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-            <span>ACTION REQUIRED ON LAPTOP</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight" style={{ color: C.ink, fontFamily: DISPLAY }}>
-            Run The Backend First!
-          </h1>
-          <p className="mt-2 text-sm sm:text-base leading-relaxed" style={{ color: C.inkSoft, fontFamily: BODY }}>
-            You opened FactLens via the QR code or link, but the <strong>FastAPI neural backend</strong> isn't running on your laptop yet. Start the backend to enable live speech transcription, coreference resolution, and cross-device syncing:
-          </p>
-
-          {/* Terminal / Launch Instructions */}
-          <div className="mt-5 bg-slate-950 text-slate-100 rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-inner">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <span className="text-xs font-mono text-slate-400 ml-2">powershell / terminal</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="text-xs font-mono inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-              >
-                {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copied ? "Copied!" : "Copy Command"}</span>
-              </button>
-            </div>
-            <p className="text-[11px] font-mono text-slate-400 mb-1"># Run in factlens_repo_starter/backend:</p>
-            <code className="text-xs sm:text-sm font-mono text-amber-300 select-all block break-all">
-              {command}
-            </code>
-            <p className="text-[11px] font-mono text-teal-400 mt-2.5">
-              💡 Or double-click <span className="underline font-bold">start_factlens.bat</span> on your desktop!
-            </p>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={onRetry}
-              disabled={isChecking}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white shadow-sm transition-all hover:brightness-105 active:scale-95"
-              style={{ backgroundColor: C.brand, fontFamily: BODY }}
-            >
-              <RefreshCw className={`w-4 h-4 ${isChecking ? "animate-spin" : ""}`} />
-              <span>{isChecking ? "Checking Connection..." : "Check Backend Connection"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onDismiss}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-all shadow-xs"
-              style={{ fontFamily: BODY }}
-            >
-              <Sparkles className="w-4 h-4 text-amber-600" />
-              <span>Explore Interface in Demo Mode →</span>
-            </button>
-          </div>
-
-          {/* "Show a bit interface" - Interactive Teaser Section */}
-          <div className="mt-8 pt-6 border-t-2 border-dashed" style={{ borderColor: C.line }}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 font-mono flex items-center gap-1.5">
-                <Globe2 className="w-3.5 h-3.5 text-teal-700" />
-                <span>Test Live Interface Preview Right Now</span>
-              </span>
-              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Offline Benchmark Engine</span>
-            </div>
-            <p className="text-xs text-slate-600 mb-3" style={{ fontFamily: BODY }}>
-              Even before starting the backend, you can test the full verification pipeline by tapping any sample claim below:
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {sampleTeasers.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => onSelectSample(s)}
-                  className="p-3 rounded-xl border text-left transition-all hover:scale-[1.02] shadow-2xs hover:shadow-xs group"
-                  style={{ backgroundColor: C.paperSoft, borderColor: C.line }}
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 font-mono block mb-1">
-                    {s.tag}
-                  </span>
-                  <p className="text-xs font-medium text-slate-900 line-clamp-2" style={{ fontFamily: s.id === "urdu" ? '"Kalam", serif' : BODY, direction: s.id === "urdu" ? "rtl" : "ltr" }}>
-                    {s.text}
-                  </p>
-                  <span className="text-[10px] text-teal-700 font-bold mt-2 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Verify claim →
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <p className="text-center text-xs font-mono text-slate-500 mt-6">
-          FAST-NUCES Islamabad • Group F26-028 • Session 2023–2027
-        </p>
-      </div>
-    </main>
   );
 }
 
@@ -1046,7 +890,11 @@ function InputScreen({
 
   const stopSpeechRecognition = () => {
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      try {
+        recognitionRef.current.stop();
+      } catch (err) {
+        console.debug("Recognition stop error:", err);
+      }
       recognitionRef.current = null;
     }
     setIsRecording(false);
@@ -1862,20 +1710,21 @@ export default function App() {
   const [deviceCount, setDeviceCount] = useState(1);
   const [backendStatus, setBackendStatus] = useState("checking"); // "online" | "offline" | "checking"
   const [backendInfo, setBackendInfo] = useState(null);
-  const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState(false);
-  const [isCheckingBackend, setIsCheckingBackend] = useState(false);
 
   const API_BASE = getApiBase();
   const wsRef = useRef(null);
   const textRef = useRef(text);
-  textRef.current = text;
+  const runAnalysisRef = useRef(null);
+
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
 
   // Active Health Prober:
   // Detects whether FastAPI is running on port 8000.
   // When offline, seamlessly falls back to Standalone Interactive Simulation
   // and guides the user/evaluator on how to start the neural backend.
   const checkBackendHealth = useCallback(async () => {
-    setIsCheckingBackend(true);
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2500);
@@ -1886,92 +1735,27 @@ export default function App() {
         setBackendStatus("online");
         setBackendInfo(data);
         return true;
-      } else {
-        setBackendStatus("offline");
-        return false;
       }
+      setBackendStatus("offline");
+      return false;
     } catch {
       setBackendStatus("offline");
       return false;
-    } finally {
-      setIsCheckingBackend(false);
     }
   }, [API_BASE]);
 
   useEffect(() => {
-    checkBackendHealth();
+    const timer = setTimeout(() => {
+      checkBackendHealth();
+    }, 100);
     const interval = setInterval(checkBackendHealth, 8000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [checkBackendHealth]);
 
-  // Live Cross-Device Sync WebSocket:
-  // Mirrors speech input, text edits, and analysis triggers in real time between mobile phone and laptop.
-  useEffect(() => {
-    let active = true;
-    let ws = null;
-    let reconnectTimer = null;
-
-    const connectWebSocket = () => {
-      try {
-        const hostname = (typeof window !== "undefined" && window.location.hostname) || "localhost";
-        const wsUrl = `ws://${hostname}:8000/ws/sync`;
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-          if (!active) return;
-          setBackendStatus("online");
-        };
-
-        ws.onmessage = (event) => {
-          if (!active) return;
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === "INIT_STATE") {
-              if (data.state && data.state.text && !textRef.current) {
-                setText(data.state.text);
-              }
-              if (data.device_count) setDeviceCount(data.device_count);
-            } else if (data.type === "DEVICE_COUNT") {
-              setDeviceCount(data.count || 1);
-            } else if (data.type === "SYNC_TEXT") {
-              if (data.text !== undefined && data.text !== textRef.current) {
-                setText(data.text);
-              }
-            } else if (data.type === "ANALYZE_TRIGGER") {
-              if (data.text) {
-                runAnalysis(data.text, null, false);
-              }
-            }
-          } catch (e) {
-            console.error("WebSocket message parsing error:", e);
-          }
-        };
-
-        ws.onclose = () => {
-          if (!active) return;
-          reconnectTimer = setTimeout(connectWebSocket, 2000);
-        };
-
-        ws.onerror = () => {
-          if (ws) ws.close();
-        };
-
-        wsRef.current = ws;
-      } catch (err) {
-        console.warn("WebSocket setup warning:", err);
-      }
-    };
-
-    connectWebSocket();
-
-    return () => {
-      active = false;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (ws) ws.close();
-    };
-  }, []);
-
-  const broadcastSyncText = (updatedText, audioLang = "en-US") => {
+  const broadcastSyncText = useCallback((updatedText, audioLang = "en-US") => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: "UPDATE_TEXT",
@@ -1987,18 +1771,18 @@ export default function App() {
         body: JSON.stringify({ text: updatedText, audioLang: audioLang }),
       }).catch(() => {});
     }
-  };
+  }, [API_BASE]);
 
-  const broadcastAnalyze = (targetText) => {
+  const broadcastAnalyze = useCallback((targetText) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: "ANALYZE_TRIGGER",
         text: targetText,
       }));
     }
-  };
+  }, []);
 
-  const fetchRealAnalysis = async (cleanText) => {
+  const fetchRealAnalysis = useCallback(async (cleanText) => {
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
@@ -2057,9 +1841,9 @@ export default function App() {
     } catch {
       return null;
     }
-  };
+  }, [API_BASE]);
 
-  const runAnalysis = async (inputText, exampleId, shouldBroadcast = true) => {
+  const runAnalysis = useCallback(async (inputText, exampleId, shouldBroadcast = true) => {
     const clean = inputText.trim();
     if (!clean) { setShake((s) => s + 1); return; }
     if (shouldBroadcast) {
@@ -2090,7 +1874,78 @@ export default function App() {
       setTimeout(advance, delay);
     };
     setTimeout(advance, 340);
-  };
+  }, [broadcastAnalyze, fetchRealAnalysis]);
+
+  useEffect(() => {
+    runAnalysisRef.current = runAnalysis;
+  }, [runAnalysis]);
+
+  // Live Cross-Device Sync WebSocket:
+  // Mirrors speech input, text edits, and analysis triggers in real time between mobile phone and laptop.
+  useEffect(() => {
+    let active = true;
+    let ws = null;
+    let reconnectTimer = null;
+
+    const connectWebSocket = () => {
+      try {
+        const hostname = (typeof window !== "undefined" && window.location.hostname) || "localhost";
+        const wsUrl = `ws://${hostname}:8000/ws/sync`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          if (!active) return;
+          setBackendStatus("online");
+        };
+
+        ws.onmessage = (event) => {
+          if (!active) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "INIT_STATE") {
+              if (data.state && data.state.text && !textRef.current) {
+                setText(data.state.text);
+              }
+              if (data.device_count) setDeviceCount(data.device_count);
+            } else if (data.type === "DEVICE_COUNT") {
+              setDeviceCount(data.count || 1);
+            } else if (data.type === "SYNC_TEXT") {
+              if (data.text !== undefined && data.text !== textRef.current) {
+                setText(data.text);
+              }
+            } else if (data.type === "ANALYZE_TRIGGER") {
+              if (data.text && runAnalysisRef.current) {
+                runAnalysisRef.current(data.text, null, false);
+              }
+            }
+          } catch (e) {
+            console.error("WebSocket message parsing error:", e);
+          }
+        };
+
+        ws.onclose = () => {
+          if (!active) return;
+          reconnectTimer = setTimeout(connectWebSocket, 2000);
+        };
+
+        ws.onerror = () => {
+          if (ws) ws.close();
+        };
+
+        wsRef.current = ws;
+      } catch (err) {
+        console.warn("WebSocket setup warning:", err);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      active = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) ws.close();
+    };
+  }, []);
 
   const reset = () => {
     setScreen("input");
