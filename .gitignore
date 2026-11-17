@@ -26,3 +26,6 @@ frontend/dist/
 
 # Archives
 *.zip
+
+backend/data/raw/
+backend/data/hate/
